@@ -1,23 +1,19 @@
 use std::{
     env::{current_dir, home_dir},
     fmt::{self, Display, Formatter},
-    path::Path,
+    path::{Path, PathBuf},
 };
 
 use camino::Utf8PathBuf;
 
 use crate::folder::folder_actions::FolderActions;
 
+#[derive(Clone)]
 pub struct Folder(Utf8PathBuf);
 
 impl Folder {
-    pub fn new(path: impl AsRef<str>) -> Folder {
-        Folder(
-            Path::new(path.as_ref())
-                .to_string_lossy()
-                .to_string()
-                .into(),
-        )
+    pub fn new(path: impl AsRef<Path>) -> Folder {
+        path.as_ref().to_path_buf().into()
     }
 }
 
@@ -27,26 +23,24 @@ impl Display for Folder {
     }
 }
 
-impl From<Utf8PathBuf> for Folder {
-    fn from(value: Utf8PathBuf) -> Self {
-        Folder(value)
+impl From<PathBuf> for Folder {
+    fn from(value: PathBuf) -> Self {
+        Folder(value.to_string_lossy().to_string().into())
     }
 }
 
 impl FolderActions for Folder {
     fn current() -> Self {
-        Folder::new(
-            current_dir()
-                .expect("Must be able to access current dir")
-                .to_string_lossy(),
-        )
+        current_dir()
+            .expect("Must be able to access current dir")
+            .into()
     }
     fn home() -> Self {
-        Folder::new(
-            home_dir()
-                .expect("Must be able to access home dir")
-                .to_string_lossy()
-        )
+        home_dir().expect("Must be able to access home dir").into()
+    }
+
+    fn exists(&self) -> bool {
+        self.0.exists()
     }
 
     fn name(&self) -> String {
@@ -56,7 +50,7 @@ impl FolderActions for Folder {
             .to_string()
     }
 
-    fn exists(&self) -> bool {
-        self.0.exists()
+    fn path_buf(&self) -> Utf8PathBuf {
+        self.0.clone()
     }
 }
