@@ -5,3 +5,4 @@ edition = "2024"
 
 [dependencies]
 camino = "1.2.5"
+jiff = { version = "0.2.37", features = ["serde"] }

@@ -72,14 +72,14 @@ impl FolderActions for Folder {
         self.0
             .file_name()
             .unwrap_or_else(|| {
-                eprintln!("Folder {} was missing a name (last piece of path).", self.0);
+                eprintln!("Folder '{}' was missing a name (last piece of path).", self.0);
                 eprintln!("This should be impossible because Folder::new constructor trims any trailing '/' or '..'");
                 panic!("Could not get Utf8PathBuf.file_name()");
             })
             .to_string()
     }
 
-    fn path_buf(&self) -> Utf8PathBuf {
+    fn utf8_path_buf(&self) -> Utf8PathBuf {
         self.0.clone()
     }
 
@@ -100,7 +100,7 @@ fn must_get_current_dir() -> Utf8PathBuf {
 
     Utf8PathBuf::try_from(current_dir).unwrap_or_else(|pb_err| {
         eprintln!(
-            "Expected current dir {:?} to be valid Utf8",
+            "Expected current dir '{}' to be valid Utf8",
             current_dir_str
         );
         eprintln!("Got camino::FromPathBufError: {:?}", &pb_err);
@@ -117,7 +117,7 @@ fn must_get_home_dir() -> Utf8PathBuf {
     let home_dir_str = home_dir.to_string_lossy().to_string();
 
     Utf8PathBuf::try_from(home_dir).unwrap_or_else(|pb_err| {
-        eprintln!("Expected home dir {:?} to be valid Utf8", home_dir_str);
+        eprintln!("Expected home dir '{}' to be valid Utf8", home_dir_str);
         eprintln!("Got camino::FromPathBufError: {:?}", &pb_err);
         eprintln!(
             "  Contains an inner std::io::Error {:?}",

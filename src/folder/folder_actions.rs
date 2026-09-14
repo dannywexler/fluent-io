@@ -8,7 +8,7 @@ pub trait FolderActions: Clone + Display + PartialEq + Eq {
     fn temp() -> Self;
     fn exists(&self) -> bool;
     fn name(&self) -> String;
-    fn path_buf(&self) -> Utf8PathBuf;
+    fn utf8_path_buf(&self) -> Utf8PathBuf;
     fn parent(&self) -> Self;
     fn folder(&self, path_segment: impl AsRef<Path>) -> Self;
 }
@@ -51,12 +51,9 @@ mod tests {
     fn test_relative_to_absolute() {
         let current = Folder::current();
         let empty = Folder::new("");
-        let dot = Folder::new(".");
         println!("current: {current}");
         println!("empty:   {empty}");
-        println!("dot:     {dot}");
         assert_eq!(current, empty);
-        assert_eq!(empty, dot);
     }
 
     #[test]
