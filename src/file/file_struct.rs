@@ -1,17 +1,17 @@
 use std::fmt::Display;
 
-use crate::{file::FileActions, folder::FolderActions};
+use crate::{file::FileActions, folder::Folder};
 
-pub struct FluentFile<FolderLike: FolderActions> {
-    folder: FolderLike,
+pub struct FluentFile {
+    folder: Folder,
     ext: Option<String>,
     name: String,
 }
 
-impl<FolderLike: FolderActions> FluentFile<FolderLike> {
-    pub fn new(folder: FolderLike, name: impl AsRef<str>, ext: Option<impl AsRef<str>>) -> Self {
+impl FluentFile {
+    pub fn new(folder: &Folder, name: impl AsRef<str>, ext: Option<impl AsRef<str>>) -> Self {
         FluentFile {
-            folder,
+            folder: folder.clone(),
             name: name.as_ref().to_string(),
             ext: ext.map(|item| item.as_ref().to_string()),
         }
@@ -22,13 +22,13 @@ impl<FolderLike: FolderActions> FluentFile<FolderLike> {
     }
 }
 
-impl<FolderLike: FolderActions> Display for FluentFile<FolderLike> {
+impl Display for FluentFile {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}/{}", self.folder, self.name_ext())
     }
 }
 
-impl<FolderLike: FolderActions> FileActions for FluentFile<FolderLike> {
+impl FileActions for FluentFile {
     fn name(&self) -> String {
         self.name.clone()
     }
@@ -40,7 +40,7 @@ impl<FolderLike: FolderActions> FileActions for FluentFile<FolderLike> {
         }
     }
 
-    fn parent(&self) -> impl FolderActions {
+    fn parent(&self) -> Folder {
         self.folder.clone()
     }
 }
