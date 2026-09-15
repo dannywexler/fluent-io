@@ -12,6 +12,8 @@ pub trait FileActions {
     fn utf8_path_buf(&self) -> Utf8PathBuf;
     fn exists(&self) -> bool;
     fn metadata(&self) -> FileActionResult<FileMetadata>;
+    fn with_name(&self, other_name: impl AsRef<str>) -> Self;
+    fn with_folder(&self, folder: impl Into<Folder>) -> Self;
 }
 
 #[cfg(test)]
@@ -20,11 +22,12 @@ mod tests {
     use crate::folder::*;
 
     #[test]
-
     fn test_file_name_ext() {
         let files = [
-            FluentFile::new(&Folder::current(), "Cargo", Some("toml")),
-            FluentFile::new(&Folder::current(), "Cargo", None::<String>),
+            FluentFile::new(Folder::current(), "Cargo", Some("toml")),
+            FluentFile::named(Folder::current(), "Cargo", "toml"),
+            FluentFile::new(Folder::current(), "Cargo", None::<String>),
+            FluentFile::named_no_ext(Folder::current(), "Cargo"),
         ];
         for f in files {
             let name = f.name();
@@ -46,9 +49,9 @@ mod tests {
     #[test]
     fn test_metadata_exists() {
         let files = [
-            FluentFile::new(&Folder::current(), "Cargo", Some("toml")),
-            FluentFile::new(&Folder::current(), "hello", Some("txt")),
-            FluentFile::new(&Folder::current(), "Has spaces", Some("ext")),
+            FluentFile::new(Folder::current(), "Cargo", Some("toml")),
+            FluentFile::new(Folder::current(), "hello", Some("txt")),
+            FluentFile::new(Folder::current(), "Has spaces", Some("ext")),
         ];
         for f in files {
             if f.exists() {

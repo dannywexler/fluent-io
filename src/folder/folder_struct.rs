@@ -4,7 +4,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use camino::Utf8PathBuf;
+use camino::{Utf8Path, Utf8PathBuf};
 
 use crate::folder::folder_actions::FolderActions;
 
@@ -39,9 +39,33 @@ impl Display for Folder {
     }
 }
 
+impl From<&str> for Folder {
+    fn from(value: &str) -> Self {
+        Folder::new(value)
+    }
+}
+
+impl From<String> for Folder {
+    fn from(value: String) -> Self {
+        Folder::new(value)
+    }
+}
+
+impl From<&Path> for Folder {
+    fn from(value: &Path) -> Self {
+        Folder::new(value.to_string_lossy().to_string())
+    }
+}
+
 impl From<PathBuf> for Folder {
     fn from(value: PathBuf) -> Self {
         Folder::new(value.to_string_lossy().to_string())
+    }
+}
+
+impl From<&Utf8Path> for Folder {
+    fn from(value: &Utf8Path) -> Self {
+        Folder::new(value)
     }
 }
 

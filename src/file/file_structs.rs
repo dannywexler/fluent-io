@@ -1,4 +1,8 @@
-use std::{fmt::Display, time::SystemTime};
+use core::fmt;
+use std::{
+    fmt::{Display, Formatter},
+    time::SystemTime,
+};
 
 use camino::Utf8PathBuf;
 use jiff::Timestamp;
@@ -15,12 +19,24 @@ pub struct FluentFile {
 }
 
 impl FluentFile {
-    pub fn new(folder: &Folder, name: impl AsRef<str>, ext: Option<impl AsRef<str>>) -> Self {
+    pub fn new(
+        folder: impl Into<Folder>,
+        name: impl AsRef<str>,
+        ext: Option<impl AsRef<str>>,
+    ) -> Self {
         FluentFile {
-            folder: folder.clone(),
+            folder: folder.into(),
             name: name.as_ref().to_string(),
             ext: ext.map(|item| item.as_ref().to_string()),
         }
+    }
+
+    pub fn named(folder: impl Into<Folder>, name: impl AsRef<str>, ext: impl AsRef<str>) -> Self {
+        FluentFile::new(folder.into(), name.as_ref(), Some(ext.as_ref().to_string()))
+    }
+
+    pub fn named_no_ext(folder: impl Into<Folder>, name: impl AsRef<str>) -> Self {
+        FluentFile::new(folder.into(), name.as_ref(), None::<String>)
     }
 
     pub fn ext(&self) -> Option<String> {
@@ -29,7 +45,7 @@ impl FluentFile {
 }
 
 impl Display for FluentFile {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "{}/{}", self.folder, self.name_ext())
     }
 }
@@ -68,11 +84,11 @@ impl FileActions for FluentFile {
                 })?;
 
         let modified = metadata.modified().unwrap_or_else(|cause| {
-            panic!("File {self} has MetaData but could not access modified time due to IO Error: {cause}.");
+            panic!("File {self} has MetaData but could not access modified time due to IO Error: {cause:#?}.");
         });
 
         let created = metadata.created().unwrap_or_else(|cause| {
-            panic!("File {self} has MetaData but could not access created time due to IO Error: {cause}.");
+            panic!("File {self} has MetaData but could not access created time due to IO Error: {cause:#?}.");
         });
 
         Ok(FileMetadata {
@@ -80,6 +96,14 @@ impl FileActions for FluentFile {
             modified: file_system_time_to_timestamp(self.to_string(), true, modified),
             created: file_system_time_to_timestamp(self.to_string(), false, created),
         })
+    }
+
+    fn with_name(&self, other_name: impl AsRef<str>) -> Self {
+        FluentFile::new(self.folder.clone(), other_name.as_ref(), self.ext.clone())
+    }
+
+    fn with_folder(&self, folder: impl Into<Folder>) -> Self {
+        FluentFile::new(folder.into(), self.name.clone(), self.ext.clone())
     }
 }
 
