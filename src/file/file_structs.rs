@@ -6,6 +6,7 @@ use std::{
 
 use camino::Utf8PathBuf;
 use jiff::Timestamp;
+use walkdir::WalkDir;
 
 use crate::{
     file::{FileActionError, FileActionResult, FileActions},
@@ -37,6 +38,26 @@ impl FluentFile {
 
     pub fn named_no_ext(folder: impl Into<Folder>, name: impl AsRef<str>) -> Self {
         FluentFile::new(folder.into(), name.as_ref(), None::<String>)
+    }
+
+    pub fn find_all(folder: impl Into<Folder>) -> impl Iterator<Item = FluentFile> {
+        WalkDir::new(folder.into().utf8_path_buf())
+            .sort_by_file_name()
+            .into_iter()
+            .filter_map(|dir_entry| {
+                let dir_ent = dir_entry.ok()?;
+                if !dir_ent.file_type().is_file() {
+                    return None;
+                }
+                let path = dir_ent.path();
+                let folder = path.parent()?.to_str()?;
+                let name = path.file_stem()?.to_str()?;
+                let mut ext = None;
+                if let Some(os_str) = path.extension() {
+                    ext = Some(os_str.to_str()?);
+                }
+                Some(FluentFile::new(folder, name, ext))
+            })
     }
 
     pub fn ext(&self) -> Option<String> {

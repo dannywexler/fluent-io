@@ -67,4 +67,12 @@ mod tests {
             println!("");
         }
     }
+
+    #[test]
+    fn test_find_all() {
+        let valid_folder = Folder::current().folder("src");
+        for file in FluentFile::find_all(valid_folder) {
+            println!("Found file: {file}");
+        }
+    }
 }

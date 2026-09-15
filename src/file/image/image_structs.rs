@@ -28,6 +28,14 @@ impl ImageFile {
         }
     }
 
+    pub fn find_all(folder: impl Into<Folder>) -> impl Iterator<Item = ImageFile> {
+        FluentFile::find_all(folder).filter_map(|ff| {
+            let ffext = ff.ext()?;
+            let format = ImageFormat::from_extension(ffext)?;
+            Some(ImageFile::new(ff.utf8_path_buf(), ff.name(), format))
+        })
+    }
+
     pub fn ext(&self) -> &'static str {
         must_get_image_format_ext(self.format)
     }
