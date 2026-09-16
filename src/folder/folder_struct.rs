@@ -5,6 +5,7 @@ use std::{
 };
 
 use camino::{Utf8Path, Utf8PathBuf};
+use walkdir::WalkDir;
 
 use crate::folder::folder_actions::FolderActions;
 
@@ -31,6 +32,28 @@ impl Folder {
                 .into(),
         )
     }
+
+    pub fn child_folders(
+        &self,
+        min_depth: usize,
+        max_depth: usize,
+    ) -> impl Iterator<Item = Folder> {
+        WalkDir::new(self.to_string())
+            .min_depth(min_depth.min(1))
+            .max_depth(max_depth.min(1))
+            .sort_by_file_name()
+            .into_iter()
+            .filter_map(|dir_entry| {
+                let dir_ent = dir_entry.ok()?;
+                if !dir_ent.file_type().is_dir() {
+                    return None;
+                }
+                let path = dir_ent.path().to_str()?;
+
+                Some(Folder::new(path))
+            })
+    }
+
 }
 
 impl Display for Folder {

@@ -11,16 +11,22 @@ pub enum FileActionError {
         path: Utf8PathBuf,
         io_error: io::Error,
     },
+    WriteData {
+        path: Utf8PathBuf,
+        io_error: io::Error,
+    },
 }
 
 impl Display for FileActionError {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        match self {
-            FileActionError::MetaData { path, io_error } => write!(
-                f,
-                "Tried to access metadata for file '{path}'. Got IO Error: {io_error}."
-            ),
-        }
+        let (action, path, io_error) = match self {
+            FileActionError::MetaData { path, io_error } => ("access metadata for", path, io_error),
+            FileActionError::WriteData { path, io_error } => ("write to", path, io_error),
+        };
+        write!(
+            f,
+            "Tried to {action} file '{path}'. Got IO Error: {io_error}."
+        )
     }
 }
 

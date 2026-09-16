@@ -1,6 +1,7 @@
 use core::fmt;
 use std::{
     fmt::{Display, Formatter},
+    fs,
     time::SystemTime,
 };
 
@@ -64,6 +65,13 @@ impl FluentFile {
 
     pub fn ext(&self) -> Option<String> {
         self.ext.clone()
+    }
+
+    pub fn write_data(&self, data: impl AsRef<[u8]>) -> FileActionResult {
+        fs::write(self.utf8_path_buf(), data).map_err(|io_error| FileActionError::WriteData {
+            path: self.utf8_path_buf(),
+            io_error,
+        })
     }
 }
 
