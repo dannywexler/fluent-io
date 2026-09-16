@@ -9,3 +9,4 @@ image = "0.25.10"
 imghash = "2.0.0"
 jiff = { version = "0.2.37", features = ["serde"] }
 walkdir = "2.5.0"
+which = "8.0.6"
