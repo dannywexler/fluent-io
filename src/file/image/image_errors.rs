@@ -13,6 +13,10 @@ pub enum ImageFileActionError {
         path: Utf8PathBuf,
         image_error: ImageError,
     },
+    Phash {
+        path: Utf8PathBuf,
+        image_error: ImageError,
+    },
 }
 
 impl Display for ImageFileActionError {
@@ -22,6 +26,9 @@ impl Display for ImageFileActionError {
                 ("get dimensions of", path, image_error)
             }
             ImageFileActionError::Open { path, image_error } => ("open", path, image_error),
+            ImageFileActionError::Phash { path, image_error } => {
+                ("get phash of", path, image_error)
+            }
         };
         write!(
             f,

@@ -53,7 +53,6 @@ impl Folder {
                 Some(Folder::new(path))
             })
     }
-
 }
 
 impl Display for Folder {
