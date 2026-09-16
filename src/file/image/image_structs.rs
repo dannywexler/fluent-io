@@ -15,6 +15,7 @@ use crate::{
     folder::Folder,
 };
 
+#[derive(Debug)]
 pub struct ImageFile {
     inner: FluentFile,
     format: ImageFormat,
@@ -32,8 +33,12 @@ impl ImageFile {
         FluentFile::find_all(folder).filter_map(|ff| {
             let ffext = ff.ext()?;
             let format = ImageFormat::from_extension(ffext)?;
-            Some(ImageFile::new(ff.utf8_path_buf(), ff.name(), format))
+            Some(ImageFile::new(ff.parent(), ff.name(), format))
         })
+    }
+
+    pub fn format(&self) -> ImageFormat {
+        self.format
     }
 
     pub fn ext(&self) -> &'static str {

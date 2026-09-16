@@ -13,6 +13,7 @@ use crate::{
     folder::{Folder, FolderActions},
 };
 
+#[derive(Debug)]
 pub struct FluentFile {
     folder: Folder,
     name: String,
@@ -50,6 +51,7 @@ impl FluentFile {
                     return None;
                 }
                 let path = dir_ent.path();
+
                 let folder = path.parent()?.to_str()?;
                 let name = path.file_stem()?.to_str()?;
                 let mut ext = None;
