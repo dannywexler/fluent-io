@@ -5,9 +5,19 @@ use std::{
 };
 
 use camino::Utf8PathBuf;
+use jiff::Timestamp;
+use serde::{Deserialize, Serialize};
+use serde_json::{Map, Value};
+use which::CanonicalPath;
 
 use crate::{
-    file::{FileActionResult, FileActions, FileMetadata, FluentFile},
+    command::FluentCommand,
+    file::{
+        FileActionError, FileActionResult, FileActions, FileMetadata, FluentFile,
+        VideoFileActionError, VideoFileActionResult,
+        VideoMetaDataError::{self, FfprobeExec},
+        parse_video_stream,
+    },
     folder::Folder,
 };
 
@@ -39,6 +49,60 @@ impl VideoFile {
 
     pub fn ext(&self) -> String {
         self.format.to_string()
+    }
+
+    pub fn metadata(&self) -> VideoFileActionResult<VideoMetaData> {
+        let fmeta = self.inner.metadata().map_err(|fae| {
+            let io_err = match fae {
+                FileActionError::MetaData { io_error, .. } => io_error,
+                _ => panic!("Should only be possible to get metadata error"),
+            };
+            VideoFileActionError::Metadata {
+                path: self.utf8_path_buf(),
+                cause: VideoMetaDataError::Io(io_err),
+            }
+        })?;
+
+        let ffprobe_canon_path =
+            CanonicalPath::new("ffprobe").map_err(|fe| VideoFileActionError::Metadata {
+                path: self.utf8_path_buf(),
+                cause: VideoMetaDataError::FfprobeMissing(fe),
+            })?;
+
+        let fcmd = FluentCommand::new(ffprobe_canon_path)
+            .args([
+                "-v",
+                "error",
+                "-show_format",
+                "-show_streams",
+                "-print_format",
+                "json",
+                self.utf8_path_buf().as_str(),
+            ])
+            .read()
+            .map_err(|fcmd_err| VideoFileActionError::Metadata {
+                path: self.utf8_path_buf(),
+                cause: FfprobeExec(fcmd_err),
+            })?;
+
+        let raw_output: Map<String, Value> =
+            serde_json::from_str(&fcmd.stdout).map_err(|srde| VideoFileActionError::Metadata {
+                path: self.utf8_path_buf(),
+                cause: VideoMetaDataError::Serde(srde),
+            })?;
+
+        let video_stream =
+            parse_video_stream(raw_output).map_err(|cause| VideoFileActionError::Metadata {
+                path: self.utf8_path_buf(),
+                cause,
+            })?;
+
+        Ok(VideoMetaData {
+            video_stream,
+            bytes: fmeta.bytes,
+            modified: fmeta.modified,
+            created: fmeta.created,
+        })
     }
 }
 
@@ -132,4 +196,20 @@ impl Display for VideoFormat {
         };
         write!(f, "{}", ext)
     }
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct VideoMetaData {
+    pub video_stream: VideoStream,
+    pub bytes: u64,
+    pub modified: Timestamp,
+    pub created: Option<Timestamp>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct VideoStream {
+    pub duration: f32, // from "format.duration" which should always exist
+    pub bit_rate: u32, // from "format.bit_rate" which should always exist
+    pub width: u16,
+    pub height: u16,
 }

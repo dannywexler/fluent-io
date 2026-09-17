@@ -124,8 +124,10 @@ impl FileActions for FluentFile {
 
         Ok(FileMetadata {
             bytes: metadata.len(),
-            modified: file_system_time_to_timestamp(self.to_string(), true, modified),
-            created: file_system_time_to_timestamp(self.to_string(), false, created),
+            modified: file_system_time_to_timestamp(self.to_string(), "modified", modified)
+                .unwrap_or_else(|| panic!("File at '{self}' must have modified time!")),
+            accessed: file_system_time_to_timestamp(self.to_string(), "accessed", created),
+            created: file_system_time_to_timestamp(self.to_string(), "created", created),
         })
     }
 
@@ -142,35 +144,34 @@ impl FileActions for FluentFile {
 pub struct FileMetadata {
     pub bytes: u64,
     pub modified: Timestamp,
-    pub created: Timestamp,
+    pub accessed: Option<Timestamp>,
+    pub created: Option<Timestamp>,
 }
 
 fn file_system_time_to_timestamp(
     path: impl AsRef<str>,
-    is_modified: bool,
+    label: &str,
     sys_time: SystemTime,
-) -> Timestamp {
+) -> Option<Timestamp> {
     let nanos_offset_from_epoch = sys_time
         .duration_since(SystemTime::UNIX_EPOCH)
         .map(|dur| dur.as_nanos() as i128)
         // If have an error, then the SystemTime was before UNIX_EPOCH
         // Flip the duration nanos to be negative to indicate this
         .unwrap_or_else(|sys_time_err| -(sys_time_err.duration().as_nanos() as i128));
+    if nanos_offset_from_epoch == 0 {
+        return None;
+    }
 
-    Timestamp::from_nanosecond(nanos_offset_from_epoch).unwrap_or_else(|jiff_err| {
+    Some(Timestamp::from_nanosecond(nanos_offset_from_epoch).unwrap_or_else(|jiff_err| {
         let path = path.as_ref();
         let before_after = if nanos_offset_from_epoch.is_negative() {
             "before"
         } else {
             "after"
         };
-        let modified_created = if is_modified {
-            "modified"
-        } else {
-            "created"
-        };
         eprintln!(
-            "File {path} had {modified_created} SystemTime of {nanos_offset_from_epoch} nanos {before_after} unix epoch",
+            "File {path} had {label} SystemTime of {nanos_offset_from_epoch} nanos {before_after} unix epoch",
         );
         let jiff_err_type = if jiff_err.is_range() {
             "Range"
@@ -193,5 +194,5 @@ fn file_system_time_to_timestamp(
             eprintln!("    As Nanos: {ts_max}");
         }
         panic!("Must be able to convert a SystemTime into a Timestamp");
-    })
+    }))
 }
