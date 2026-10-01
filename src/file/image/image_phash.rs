@@ -62,7 +62,7 @@ impl ImageFile {
 }
 
 fn must_decode_phash(image_phash: &ImagePhash) -> ImageHash {
-    ImageHash::decode(&image_phash.0, 8, 8).unwrap_or_else(|phe| panic!("Should be impossible to ever have an error decoding an ImagePhash's internal string because those internal strings are only ever encoded with the default 8x8 size. Instead got error {phe:?}"))
+    ImageHash::decode(&image_phash.0, 8, 8).unwrap_or_else(|phe| panic!("Should be impossible to have an error decoding an ImagePhash's internal string because those internal strings are only ever encoded with the default 8x8 size. Instead got error {phe:?}"))
 }
 
 #[cfg(test)]

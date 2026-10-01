@@ -2,26 +2,27 @@ use core::fmt;
 use std::{
     fmt::{Display, Formatter},
     ops::Deref,
+    time::Duration,
 };
 
 use camino::Utf8PathBuf;
+use image::ImageFormat;
 use jiff::Timestamp;
+use monostate::MustBe;
 use serde::{Deserialize, Serialize};
-use serde_json::{Map, Value};
-use which::CanonicalPath;
+use serde_json::Value;
 
 use crate::{
-    command::FluentCommand,
+    command::{FfmpegBinary, FfprobeBinary},
     file::{
-        FileActionError, FileActionResult, FileActions, FileMetadata, FluentFile,
-        VideoFileActionError, VideoFileActionResult,
-        VideoMetaDataError::{self, FfprobeExec},
-        parse_video_stream,
+        FileActionError, FileActionResult, FileActions, FileMetadata, FluentFile, ImageFile,
+        VideoFileActionError, VideoFileActionResult, VideoFrameError,
+        VideoMetaDataError::{self, Ffprobe},
     },
-    folder::Folder,
+    folder::{Folder, FolderActions},
 };
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct VideoFile {
     inner: FluentFile,
     format: VideoFormat,
@@ -51,25 +52,20 @@ impl VideoFile {
         self.format.to_string()
     }
 
-    pub fn metadata(&self) -> VideoFileActionResult<VideoMetaData> {
-        let fmeta = self.inner.metadata().map_err(|fae| {
+    pub fn metadata(&self, ffprobe: &FfprobeBinary) -> VideoFileActionResult<VideoMetaData> {
+        let file_metadata = self.inner.metadata().map_err(|fae| {
             let io_err = match fae {
                 FileActionError::MetaData { io_error, .. } => io_error,
                 _ => panic!("Should only be possible to get metadata error"),
             };
             VideoFileActionError::Metadata {
                 path: self.utf8_path_buf(),
-                cause: VideoMetaDataError::Io(io_err),
+                cause: Box::new(VideoMetaDataError::Io(io_err)),
             }
         })?;
 
-        let ffprobe_canon_path =
-            CanonicalPath::new("ffprobe").map_err(|fe| VideoFileActionError::Metadata {
-                path: self.utf8_path_buf(),
-                cause: VideoMetaDataError::FfprobeMissing(fe),
-            })?;
-
-        let fcmd = FluentCommand::new(ffprobe_canon_path)
+        let ffprobe_cmd = ffprobe
+            .cmd()
             .args([
                 "-v",
                 "error",
@@ -82,27 +78,46 @@ impl VideoFile {
             .read()
             .map_err(|fcmd_err| VideoFileActionError::Metadata {
                 path: self.utf8_path_buf(),
-                cause: FfprobeExec(fcmd_err),
+                cause: Box::new(Ffprobe(fcmd_err)),
             })?;
 
-        let raw_output: Map<String, Value> =
-            serde_json::from_str(&fcmd.stdout).map_err(|srde| VideoFileActionError::Metadata {
+        let ffprobe_output: Value = serde_json::from_str(&ffprobe_cmd.stdout).map_err(|srde| {
+            VideoFileActionError::Metadata {
                 path: self.utf8_path_buf(),
-                cause: VideoMetaDataError::Serde(srde),
-            })?;
+                cause: Box::new(VideoMetaDataError::Serde(srde)),
+            }
+        })?;
 
-        let video_stream =
-            parse_video_stream(raw_output).map_err(|cause| VideoFileActionError::Metadata {
-                path: self.utf8_path_buf(),
-                cause,
-            })?;
+        let format_stream: FormatStream =
+            ffprobe_output
+                .clone()
+                .try_into()
+                .map_err(|cause| VideoFileActionError::Metadata {
+                    path: self.utf8_path_buf(),
+                    cause: Box::new(cause),
+                })?;
+
+        let video_stream: VideoStream =
+            ffprobe_output
+                .try_into()
+                .map_err(|cause| VideoFileActionError::Metadata {
+                    path: self.utf8_path_buf(),
+                    cause: Box::new(cause),
+                })?;
 
         Ok(VideoMetaData {
-            video_stream,
-            bytes: fmeta.bytes,
-            modified: fmeta.modified,
-            created: fmeta.created,
+            bit_rate: format_stream.bit_rate,
+            bytes: file_metadata.bytes,
+            created: file_metadata.created,
+            duration: Duration::from_secs_f32(format_stream.duration),
+            height: video_stream.height,
+            modified: file_metadata.modified,
+            width: video_stream.width,
         })
+    }
+
+    pub fn extract_frame(&self, ffmpeg: &FfmpegBinary) -> ExtractFrameBuilder {
+        ExtractFrameBuilder::new(self, ffmpeg)
     }
 }
 
@@ -200,16 +215,185 @@ impl Display for VideoFormat {
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct VideoMetaData {
-    pub video_stream: VideoStream,
+    pub bit_rate: u32,
     pub bytes: u64,
-    pub modified: Timestamp,
     pub created: Option<Timestamp>,
+    pub duration: Duration,
+    pub height: u16,
+    pub modified: Timestamp,
+    pub width: u16,
+}
+
+struct FormatStream {
+    pub bit_rate: u32,
+    pub duration: f32,
+}
+
+impl TryFrom<Value> for FormatStream {
+    type Error = VideoMetaDataError;
+
+    fn try_from(raw_ffprobe_output: Value) -> Result<Self, Self::Error> {
+        let format_obj = raw_ffprobe_output.get("format").ok_or_else(|| {
+            VideoMetaDataError::InvalidStructure("ffprobe output was missing format field".into())
+        })?;
+
+        let duration: f32 = format_obj
+            .get("duration")
+            .ok_or_else(|| {
+                VideoMetaDataError::InvalidStructure("format.duration was missing".into())
+            })?
+            .as_str()
+            .ok_or_else(|| {
+                VideoMetaDataError::InvalidStructure("format.duration was not a string".into())
+            })?
+            .parse()
+            .map_err(|parse_err| {
+                VideoMetaDataError::InvalidStructure(format!(
+                    "format.duration could not be parsed to a f32: {parse_err:#?}"
+                ))
+            })?;
+
+        let bit_rate: u32 = format_obj
+            .get("bit_rate")
+            .ok_or_else(|| {
+                VideoMetaDataError::InvalidStructure("Missing format.bit_rate field".into())
+            })?
+            .as_str()
+            .ok_or_else(|| {
+                VideoMetaDataError::InvalidStructure("format.bit_rate was not a string".into())
+            })?
+            .parse()
+            .map_err(|parse_err| {
+                VideoMetaDataError::InvalidStructure(format!(
+                    "format.bit_rate could not be parsed to a u32: {parse_err:#?}"
+                ))
+            })?;
+        Ok(FormatStream { duration, bit_rate })
+    }
 }
 
 #[derive(Debug, Deserialize, Serialize)]
-pub struct VideoStream {
-    pub duration: f32, // from "format.duration" which should always exist
-    pub bit_rate: u32, // from "format.bit_rate" which should always exist
-    pub width: u16,
+struct VideoStream {
+    codec_type: MustBe!("video"),
     pub height: u16,
+    pub width: u16,
+}
+
+impl TryFrom<Value> for VideoStream {
+    type Error = VideoMetaDataError;
+
+    fn try_from(raw_ffprobe_output: Value) -> Result<Self, Self::Error> {
+        let streams = raw_ffprobe_output
+            .get("streams")
+            .ok_or_else(|| {
+                VideoMetaDataError::InvalidStructure(
+                    "ffprobe output was missing streams field".into(),
+                )
+            })?
+            .as_array()
+            .ok_or_else(|| {
+                VideoMetaDataError::InvalidStructure("streams value was not an array".into())
+            })?;
+
+        for stream in streams {
+            if let Ok(vid_stream) = serde_json::from_value(stream.clone()) {
+                return Ok(vid_stream);
+            }
+            continue;
+        }
+        Err(VideoMetaDataError::InvalidStructure(
+            "No stream with codec_type of 'video' was found.".into(),
+        ))
+    }
+}
+
+pub struct ExtractFrameBuilder {
+    source_video: VideoFile,
+    ffmpeg: FfmpegBinary,
+    image_format: ImageFormat,
+    image_folder: Folder,
+    image_name: String,
+    custom_width: Option<u16>,
+    custom_height: Option<u16>,
+}
+
+impl ExtractFrameBuilder {
+    pub fn new(source_video: &VideoFile, ffmpeg: &FfmpegBinary) -> Self {
+        ExtractFrameBuilder {
+            source_video: source_video.to_owned(),
+            ffmpeg: ffmpeg.to_owned(),
+            image_format: ImageFormat::Avif,
+            image_folder: source_video.parent().clone(),
+            image_name: source_video.name(),
+            custom_width: None,
+            custom_height: None,
+        }
+    }
+
+    pub fn set_image_format(&mut self, new_image_format: ImageFormat) -> &mut Self {
+        self.image_format = new_image_format;
+        self
+    }
+
+    pub fn set_image_folder(&mut self, new_destination_folder: impl Into<Folder>) -> &mut Self {
+        self.image_folder = new_destination_folder.into();
+        self
+    }
+
+    pub fn set_image_name(&mut self, new_name: impl AsRef<str>) -> &mut Self {
+        self.image_name = new_name.as_ref().to_string();
+        self
+    }
+
+    pub fn set_custom_width(&mut self, custom_width: u16) -> &mut Self {
+        self.custom_width = Some(custom_width);
+        self
+    }
+
+    pub fn set_custom_height(&mut self, custom_height: u16) -> &mut Self {
+        self.custom_height = Some(custom_height);
+        self
+    }
+
+    pub fn extract(&self, seconds: f32) -> VideoFileActionResult<ImageFile> {
+        self.image_folder.ensure_exists();
+        let dest_path = ImageFile::new(
+            self.image_folder.clone(),
+            self.image_name.clone(),
+            self.image_format,
+        );
+
+        let mut fcmd = self.ffmpeg.cmd();
+        fcmd.args([
+            "-v",
+            "error",
+            "-ss",
+            seconds.to_string().as_str(),
+            "-i",
+            self.source_video.to_string().as_str(),
+            "-frames:v",
+            "1",
+            "-y",
+            dest_path.to_string().as_str(),
+        ]);
+
+        let scale = match (self.custom_width, self.custom_height) {
+            (None, None) => None,
+            (Some(c_width), None) => Some(format!("{c_width}:-1")),
+            (None, Some(c_height)) => Some(format!("-1:{c_height}")),
+            (Some(c_width), Some(c_height)) => Some(format!("{c_width}:{c_height}")),
+        };
+
+        if let Some(scale_inner) = scale {
+            fcmd.args(["-vf", format!("scale={scale_inner}").as_str()]);
+        }
+
+        fcmd.read()
+            .map_err(|fcmd_err| VideoFileActionError::ExtractFrame {
+                path: self.source_video.utf8_path_buf(),
+                cause: Box::new(VideoFrameError::Ffmpeg(fcmd_err)),
+            })?;
+
+        Ok(dest_path)
+    }
 }

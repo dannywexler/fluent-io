@@ -14,7 +14,7 @@ use crate::{
     folder::{Folder, FolderActions},
 };
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct FluentFile {
     folder: Folder,
     name: String,

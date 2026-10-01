@@ -11,6 +11,8 @@ pub trait FolderActions: Clone + Display + PartialEq + Eq {
     fn utf8_path_buf(&self) -> Utf8PathBuf;
     fn parent(&self) -> Self;
     fn folder(&self, path_segment: impl AsRef<Path>) -> Self;
+    fn ensure_exists(&self) -> bool;
+    fn remove(&self) -> bool;
 }
 
 #[cfg(test)]

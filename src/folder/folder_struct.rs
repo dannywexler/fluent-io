@@ -1,6 +1,7 @@
 use std::{
     env::{current_dir, home_dir, temp_dir},
     fmt::{self, Display, Formatter},
+    fs::{create_dir_all, remove_dir_all},
     path::{Path, PathBuf},
 };
 
@@ -137,6 +138,31 @@ impl FolderActions for Folder {
         self.0
             .join(path_segment.as_ref().to_string_lossy().to_string())
             .into()
+    }
+
+    fn ensure_exists(&self) -> bool {
+        if self.0.exists() {
+            return true;
+        }
+        create_dir_all(&self.0).unwrap_or_else(|io_err| {
+            panic!(
+                "Must be able to create folder: {}\nInstead got IO Error: {:?}",
+                self.0, io_err
+            );
+        });
+        false
+    }
+
+    fn remove(&self) -> bool {
+        if !self.0.exists() {
+            return false;
+        }
+        remove_dir_all(self.0.clone()).unwrap_or_else(|io_error| {
+            eprintln!("Tried to remove folder: {}", self.0);
+            eprintln!("Got IoError: {}", io_error);
+            panic!();
+        });
+        true
     }
 }
 
