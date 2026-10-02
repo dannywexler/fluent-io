@@ -16,6 +16,10 @@ use crate::{
 pub struct VideoPhash(Vec<ImagePhash>);
 
 impl VideoPhash {
+    pub fn image_phashes(&self) -> Vec<ImagePhash> {
+        self.0.clone()
+    }
+
     pub fn distance_to(&self, other: &VideoPhash) -> Vec<usize> {
         self.0
             .iter()
@@ -32,6 +36,12 @@ impl VideoPhash {
         self.distance_to(other)
             .iter()
             .all(|dist| dist <= &threshold)
+    }
+}
+
+impl From<Vec<ImagePhash>> for VideoPhash {
+    fn from(value: Vec<ImagePhash>) -> Self {
+        VideoPhash(value)
     }
 }
 

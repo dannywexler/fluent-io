@@ -4,13 +4,13 @@ use std::{
 };
 
 use image::ImageError;
-use imghash::{ImageHash, perceptual_hash};
+use imghash::{ImageHash, ImageHashError, perceptual_hash};
 
 use crate::file::{FileActions, ImageFile, ImageFileActionError, ImageFileActionResult};
 
 pub const DEFAULT_PHASH_SIMILARITY_THRESHOLD: usize = 6;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ImagePhash(String);
 
 impl ImagePhash {
@@ -32,6 +32,11 @@ impl ImagePhash {
             return true;
         }
         self.distance_to(other) <= threshold
+    }
+
+    pub fn parse_string(maybe_phash: impl AsRef<str>) -> Result<ImagePhash, ImageHashError> {
+        ImageHash::decode(maybe_phash.as_ref(), 8, 8)
+            .map(|image_hash| ImagePhash(must_encode_image_hash(image_hash)))
     }
 }
 
@@ -55,14 +60,17 @@ impl ImageFile {
                     _ => panic!("Should only ever be possible to get io::ErrorKind::NotFound if the file does not exist, or image::ImageError when the file exists but could not be phashed. Already checked that the file exists before attempting to get phash of it."),
                 })?;
 
-        let phash_str = image_hash
-                .encode().unwrap_or_else(|phe| panic!("Should be impossible to have an error encoding a successfully created ImageHash instance. Instead got error {phe:?}"));
+        let phash_str = must_encode_image_hash(image_hash);
         Ok(ImagePhash(phash_str))
     }
 }
 
 fn must_decode_phash(image_phash: &ImagePhash) -> ImageHash {
     ImageHash::decode(&image_phash.0, 8, 8).unwrap_or_else(|phe| panic!("Should be impossible to have an error decoding an ImagePhash's internal string because those internal strings are only ever encoded with the default 8x8 size. Instead got error {phe:?}"))
+}
+
+fn must_encode_image_hash(image_hash: ImageHash) -> String {
+    image_hash.encode().unwrap_or_else(|phe| panic!("Should be impossible to have an error encoding a successfully created ImageHash instance. Instead got error {phe:?}"))
 }
 
 #[cfg(test)]

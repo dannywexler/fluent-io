@@ -10,6 +10,12 @@ impl FfmpegBinary {
         CanonicalPath::new("ffmpeg").map(FfmpegBinary)
     }
 
+    pub fn must_find() -> FfmpegBinary {
+        FfmpegBinary::find().unwrap_or_else(|which_error| {
+            panic!("Could not find ffmpeg binary!\n{which_error}");
+        })
+    }
+
     pub fn path(&self) -> CanonicalPath {
         self.0.clone()
     }

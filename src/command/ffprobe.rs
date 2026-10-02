@@ -10,6 +10,12 @@ impl FfprobeBinary {
         CanonicalPath::new("ffprobe").map(FfprobeBinary)
     }
 
+    pub fn must_find() -> FfprobeBinary {
+        FfprobeBinary::find().unwrap_or_else(|which_error| {
+            panic!("Could not find ffprobe binary!\n{which_error}");
+        })
+    }
+
     pub fn path(&self) -> CanonicalPath {
         self.0.clone()
     }
