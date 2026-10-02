@@ -108,6 +108,7 @@ impl VideoFile {
         Ok(VideoMetaData {
             bit_rate: format_stream.bit_rate,
             bytes: file_metadata.bytes,
+            codec: video_stream.codec_name,
             created: file_metadata.created,
             duration: Duration::from_secs_f32(format_stream.duration),
             height: video_stream.height,
@@ -178,6 +179,7 @@ pub enum VideoFormat {
     Mp4,
     Mpg,
     Rm,
+    WebM,
     Wmv,
 }
 
@@ -189,8 +191,9 @@ impl VideoFormat {
             "mkv" => Some(VideoFormat::Mkv),
             "mov" => Some(VideoFormat::Mov),
             "mp4" => Some(VideoFormat::Mp4),
-            "mpg" => Some(VideoFormat::Mpg),
+            "mpg" | "MPG" => Some(VideoFormat::Mpg),
             "rm" => Some(VideoFormat::Rm),
+            "webm" => Some(VideoFormat::WebM),
             "wmv" => Some(VideoFormat::Wmv),
             _ => None,
         }
@@ -207,6 +210,7 @@ impl Display for VideoFormat {
             VideoFormat::Mp4 => "mp4",
             VideoFormat::Mpg => "mpg",
             VideoFormat::Rm => "rm",
+            VideoFormat::WebM => "webm",
             VideoFormat::Wmv => "wmv",
         };
         write!(f, "{}", ext)
@@ -217,6 +221,7 @@ impl Display for VideoFormat {
 pub struct VideoMetaData {
     pub bit_rate: u32,
     pub bytes: u64,
+    pub codec: VideoCodec,
     pub created: Option<Timestamp>,
     pub duration: Duration,
     pub height: u16,
@@ -275,6 +280,7 @@ impl TryFrom<Value> for FormatStream {
 #[derive(Debug, Deserialize, Serialize)]
 struct VideoStream {
     codec_type: MustBe!("video"),
+    pub codec_name: VideoCodec,
     pub height: u16,
     pub width: u16,
 }
@@ -305,6 +311,35 @@ impl TryFrom<Value> for VideoStream {
             "No stream with codec_type of 'video' was found.".into(),
         ))
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum VideoCodec {
+    Av1,
+    Cinepak,
+    Flv1,
+    H264,
+    Hevc,
+    Mjpeg,
+    Mpeg1Video,
+    Mpeg2Video,
+    Mpeg4,
+    Msmpeg4V1,
+    Msmpeg4V2,
+    Msmpeg4V3,
+    Prores,
+    Rv10,
+    Rv20,
+    Rv30,
+    Rv40,
+    Svq3,
+    Vc1,
+    Vp6F,
+    Vp9,
+    Wmv1,
+    Wmv2,
+    Wmv3,
 }
 
 pub struct ExtractFrameBuilder {
