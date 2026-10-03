@@ -15,8 +15,8 @@ use serde_json::Value;
 use crate::{
     command::{FfmpegBinary, FfprobeBinary},
     file::{
-        FileActionError, FileActionResult, FileActions, FileMetadata, FluentFile, ImageFile,
-        VideoFileActionError, VideoFileActionResult, VideoFrameError,
+        FileActions, FileMoveToError, FluentFile, ImageFile, VideoFileActionError,
+        VideoFileActionResult, VideoFrameError,
         VideoMetaDataError::{self, Ffprobe},
     },
     folder::{Folder, FolderActions},
@@ -52,17 +52,18 @@ impl VideoFile {
         self.format.to_string()
     }
 
+    pub fn move_to(&self, to: &Self) -> Result<Self, FileMoveToError> {
+        self.inner.move_to(&to.inner).map(|_| to.clone())
+    }
+
     pub fn metadata(&self, ffprobe: &FfprobeBinary) -> VideoFileActionResult<VideoMetaData> {
-        let file_metadata = self.inner.metadata().map_err(|fae| {
-            let io_err = match fae {
-                FileActionError::MetaData { io_error, .. } => io_error,
-                _ => panic!("Should only be possible to get metadata error"),
-            };
-            VideoFileActionError::Metadata {
-                path: self.utf8_path_buf(),
-                cause: Box::new(VideoMetaDataError::Io(io_err)),
-            }
-        })?;
+        let file_metadata =
+            self.inner
+                .metadata()
+                .map_err(|fae| VideoFileActionError::Metadata {
+                    path: self.utf8_path_buf(),
+                    cause: Box::new(VideoMetaDataError::Io(fae.io_error)),
+                })?;
 
         let ffprobe_cmd = ffprobe
             .cmd()
@@ -155,10 +156,6 @@ impl FileActions for VideoFile {
 
     fn exists(&self) -> bool {
         self.inner.exists()
-    }
-
-    fn metadata(&self) -> FileActionResult<FileMetadata> {
-        self.inner.metadata()
     }
 
     fn with_name(&self, other_name: impl AsRef<str>) -> Self {
@@ -340,6 +337,18 @@ pub enum VideoCodec {
     Wmv1,
     Wmv2,
     Wmv3,
+}
+
+impl Display for VideoCodec {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            serde_json::to_string(self)
+                .expect("Can serialize a valid VideoCodec")
+                .trim_matches('"')
+        )
+    }
 }
 
 pub struct ExtractFrameBuilder {

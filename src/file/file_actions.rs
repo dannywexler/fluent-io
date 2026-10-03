@@ -1,9 +1,6 @@
 use camino::Utf8PathBuf;
 
-use crate::{
-    file::{FileActionResult, FileMetadata},
-    folder::Folder,
-};
+use crate::folder::Folder;
 
 pub trait FileActions {
     fn name(&self) -> String;
@@ -11,7 +8,6 @@ pub trait FileActions {
     fn parent(&self) -> Folder;
     fn utf8_path_buf(&self) -> Utf8PathBuf;
     fn exists(&self) -> bool;
-    fn metadata(&self) -> FileActionResult<FileMetadata>;
     fn with_name(&self, other_name: impl AsRef<str>) -> Self;
     fn with_folder(&self, folder: impl Into<Folder>) -> Self;
 }

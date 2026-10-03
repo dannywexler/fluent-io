@@ -6,28 +6,50 @@ use std::{
 use camino::Utf8PathBuf;
 
 #[derive(Debug)]
-pub enum FileActionError {
-    MetaData {
-        path: Utf8PathBuf,
-        io_error: io::Error,
-    },
-    WriteData {
-        path: Utf8PathBuf,
-        io_error: io::Error,
-    },
+pub struct FileMetaDataError {
+    pub path: Utf8PathBuf,
+    pub io_error: io::Error,
 }
 
-impl Display for FileActionError {
+impl Display for FileMetaDataError {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        let (action, path, io_error) = match self {
-            FileActionError::MetaData { path, io_error } => ("access metadata for", path, io_error),
-            FileActionError::WriteData { path, io_error } => ("write to", path, io_error),
-        };
         write!(
             f,
-            "Tried to {action} file '{path}'. Got IO Error: {io_error}."
+            "Tried to access metadata for file {}\nGot Io Error {}",
+            self.path, self.io_error
         )
     }
 }
 
-pub type FileActionResult<T = ()> = Result<T, FileActionError>;
+#[derive(Debug)]
+pub struct FileWriteDataError {
+    pub path: Utf8PathBuf,
+    pub io_error: io::Error,
+}
+
+impl Display for FileWriteDataError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "Tried to write data to file {}\nGot Io Error {}",
+            self.path, self.io_error
+        )
+    }
+}
+
+#[derive(Debug)]
+pub struct FileMoveToError {
+    pub from: Utf8PathBuf,
+    pub to: Utf8PathBuf,
+    pub io_error: io::Error,
+}
+
+impl Display for FileMoveToError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "Tried to move file from {} to {}\nGot Io Error {}",
+            self.from, self.to, self.io_error
+        )
+    }
+}

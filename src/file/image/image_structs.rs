@@ -8,14 +8,11 @@ use camino::Utf8PathBuf;
 use image::{DynamicImage, ImageFormat, image_dimensions};
 
 use crate::{
-    file::{
-        FileActionResult, FileActions, FileMetadata, FluentFile, ImageFileActionError,
-        ImageFileActionResult,
-    },
+    file::{FileActions, FileMoveToError, FluentFile, ImageFileActionError, ImageFileActionResult},
     folder::Folder,
 };
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ImageFile {
     inner: FluentFile,
     format: ImageFormat,
@@ -43,6 +40,10 @@ impl ImageFile {
 
     pub fn ext(&self) -> &'static str {
         must_get_image_format_ext(self.format)
+    }
+
+    pub fn move_to(&self, to: &Self) -> Result<Self, FileMoveToError> {
+        self.inner.move_to(&to.inner).map(|_| to.clone())
     }
 
     pub fn mime_type(&self) -> &'static str {
@@ -97,10 +98,6 @@ impl FileActions for ImageFile {
 
     fn exists(&self) -> bool {
         self.inner.exists()
-    }
-
-    fn metadata(&self) -> FileActionResult<FileMetadata> {
-        self.inner.metadata()
     }
 
     fn with_name(&self, other_name: impl AsRef<str>) -> Self {
