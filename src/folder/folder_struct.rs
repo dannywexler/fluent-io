@@ -20,7 +20,8 @@ impl Folder {
         let path = path.as_ref().to_string_lossy();
         let abs_path = if path.starts_with(TILDE) {
             // remove "~" and join with full home folder
-            must_get_home_dir().join(path.trim_start_matches(TILDE).trim_start_matches("/"))
+            must_get_home_dir()
+                .join(path.trim_start_matches(TILDE).trim_start_matches("/"))
         } else {
             // join with current folder
             must_get_current_dir().join(path.to_string())
@@ -40,8 +41,8 @@ impl Folder {
         max_depth: usize,
     ) -> impl Iterator<Item = Folder> {
         WalkDir::new(self.to_string())
-            .min_depth(min_depth.min(1))
-            .max_depth(max_depth.min(1))
+            .min_depth(min_depth.max(1))
+            .max_depth(max_depth.max(1))
             .sort_by_file_name()
             .into_iter()
             .filter_map(|dir_entry| {

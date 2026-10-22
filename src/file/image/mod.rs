@@ -4,3 +4,5 @@ mod image_structs;
 pub use image_errors::*;
 pub use image_phash::*;
 pub use image_structs::*;
+
+pub use image::ImageFormat;

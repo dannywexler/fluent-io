@@ -6,8 +6,8 @@ use jiff::Timestamp;
 use crate::{
     command::FfmpegBinary,
     file::{
-        DEFAULT_PHASH_SIMILARITY_THRESHOLD, FileActions, ImageFileActionError, ImagePhash,
-        VideoFile, VideoFileActionError, VideoFileActionResult, VideoPhashError,
+        DEFAULT_PHASH_SIMILARITY_THRESHOLD, ExtractFrameBuilder, FileActions, ImagePhash,
+        VideoFile, VideoPhashError, VideoPhashErrorCause,
     },
     folder::{Folder, FolderActions},
 };
@@ -32,7 +32,11 @@ impl VideoPhash {
         self.is_similar_to_custom_threshold(other, DEFAULT_PHASH_SIMILARITY_THRESHOLD)
     }
 
-    pub fn is_similar_to_custom_threshold(&self, other: &VideoPhash, threshold: usize) -> bool {
+    pub fn is_similar_to_custom_threshold(
+        &self,
+        other: &VideoPhash,
+        threshold: usize,
+    ) -> bool {
         self.distance_to(other)
             .iter()
             .all(|dist| dist <= &threshold)
@@ -50,10 +54,7 @@ impl VideoFile {
         &self,
         video_duration: &Duration,
         ffmpeg: &FfmpegBinary,
-    ) -> VideoFileActionResult<VideoPhash> {
-        let video_duration_seconds = video_duration.as_secs_f32();
-        let mut phashes = vec![];
-
+    ) -> Result<VideoPhash, VideoPhashError> {
         let dest_folder = Folder::temp()
             .folder("phashes")
             .folder(format!("{:x}", Timestamp::now().as_millisecond()));
@@ -61,44 +62,35 @@ impl VideoFile {
 
         let mut efb = self.extract_frame(ffmpeg);
         efb.set_image_folder(dest_folder.to_string());
-        efb.set_image_format(ImageFormat::Jpeg);
+        efb.set_image_format(&ImageFormat::Jpeg);
 
-        let mut maybe_error = None::<VideoFileActionError>;
-
-        for pct in 1..=9 {
-            let seconds = video_duration_seconds * pct as f32 / 10.0;
-            efb.set_image_name(pct.to_string());
-            match efb.extract(seconds) {
-                Ok(img_file) => {
-                    let phash =
-                        img_file
-                            .phash()
-                            .map_err(|imgact_err| VideoFileActionError::Phash {
-                                path: self.utf8_path_buf(),
-                                cause: Box::new(VideoPhashError::ImagePhash(match imgact_err {
-                                    ImageFileActionError::Phash { image_error, .. } => image_error,
-                                    _ => panic!("Should only be possible to get image phash error"),
-                                })),
-                            });
-                    if let Err(phash_err) = phash {
-                        maybe_error = Some(phash_err);
-                        break;
-                    }
-                    phashes.push(phash.unwrap());
-                }
-                Err(extract_error) => {
-                    maybe_error = Some(extract_error);
-                    break;
-                }
-            }
-        }
+        let outcome = video_phash_helper(video_duration, &mut efb);
 
         dest_folder.remove();
-        if let Some(vid_err) = maybe_error {
-            return Err(vid_err);
-        }
-        Ok(VideoPhash(phashes))
+
+        outcome.map_err(|cause| VideoPhashError {
+            path: self.utf8_path_buf(),
+            cause: Box::new(cause),
+        })
     }
+}
+
+fn video_phash_helper(
+    video_duration: &Duration,
+    efb: &mut ExtractFrameBuilder,
+) -> Result<VideoPhash, VideoPhashErrorCause> {
+    let mut phashes = vec![];
+    for pct in 1..=9 {
+        efb.set_image_name(pct.to_string());
+        let seconds = video_duration.as_secs_f32() * pct as f32 / 10.0;
+        let phash = efb
+            .extract(&Duration::from_secs_f32(seconds))
+            .map_err(|err| VideoPhashErrorCause::Ffmpeg(*err.cause))?
+            .phash()
+            .map_err(|err| VideoPhashErrorCause::ImagePhash(err.image_error))?;
+        phashes.push(phash);
+    }
+    Ok(VideoPhash(phashes))
 }
 
 #[cfg(test)]

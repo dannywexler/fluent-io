@@ -5,10 +5,13 @@ use std::{
 };
 
 use camino::Utf8PathBuf;
-use image::{DynamicImage, ImageFormat, image_dimensions};
+use image::{DynamicImage, ImageFormat};
 
 use crate::{
-    file::{FileActions, FileMoveToError, FluentFile, ImageFileActionError, ImageFileActionResult},
+    file::{
+        FileActions, FileCopyToError, FileMoveToError, FileRemoveError, FluentFile,
+        ImageOpenError,
+    },
     folder::Folder,
 };
 
@@ -19,9 +22,17 @@ pub struct ImageFile {
 }
 
 impl ImageFile {
-    pub fn new(folder: impl Into<Folder>, name: impl AsRef<str>, format: ImageFormat) -> ImageFile {
+    pub fn new(
+        folder: impl Into<Folder>,
+        name: impl AsRef<str>,
+        format: ImageFormat,
+    ) -> ImageFile {
         ImageFile {
-            inner: FluentFile::new(folder.into(), name, Some(must_get_image_format_ext(format))),
+            inner: FluentFile::new(
+                folder.into(),
+                name,
+                Some(must_get_image_format_ext(format)),
+            ),
             format,
         }
     }
@@ -42,6 +53,10 @@ impl ImageFile {
         must_get_image_format_ext(self.format)
     }
 
+    pub fn copy_to(&self, to: &Self) -> Result<Self, FileCopyToError> {
+        self.inner.copy_to(&to.inner).map(|_| to.clone())
+    }
+
     pub fn move_to(&self, to: &Self) -> Result<Self, FileMoveToError> {
         self.inner.move_to(&to.inner).map(|_| to.clone())
     }
@@ -50,15 +65,8 @@ impl ImageFile {
         self.format.to_mime_type()
     }
 
-    pub fn dimensions(&self) -> ImageFileActionResult<(u32, u32)> {
-        image_dimensions(self.to_string()).map_err(|image_error| ImageFileActionError::Dimensions {
-            path: self.utf8_path_buf(),
-            image_error,
-        })
-    }
-
-    pub fn open(&self) -> ImageFileActionResult<DynamicImage> {
-        image::open(self.to_string()).map_err(|image_error| ImageFileActionError::Open {
+    pub fn open(&self) -> Result<DynamicImage, ImageOpenError> {
+        image::open(self.to_string()).map_err(|image_error| ImageOpenError {
             path: self.utf8_path_buf(),
             image_error,
         })
@@ -106,6 +114,10 @@ impl FileActions for ImageFile {
 
     fn with_folder(&self, folder: impl Into<Folder>) -> ImageFile {
         ImageFile::new(folder.into(), self.name(), self.format)
+    }
+
+    fn remove(self) -> Result<(), FileRemoveError> {
+        self.inner.remove()
     }
 }
 

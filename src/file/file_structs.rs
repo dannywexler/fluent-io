@@ -10,7 +10,10 @@ use jiff::Timestamp;
 use walkdir::WalkDir;
 
 use crate::{
-    file::{FileActions, FileMetaDataError, FileMoveToError, FileWriteDataError},
+    file::{
+        FileActions, FileCopyToError, FileMetaDataError, FileMoveToError,
+        FileRemoveError, FileWriteDataError,
+    },
     folder::{Folder, FolderActions},
 };
 
@@ -34,7 +37,11 @@ impl FluentFile {
         }
     }
 
-    pub fn named(folder: impl Into<Folder>, name: impl AsRef<str>, ext: impl AsRef<str>) -> Self {
+    pub fn named(
+        folder: impl Into<Folder>,
+        name: impl AsRef<str>,
+        ext: impl AsRef<str>,
+    ) -> Self {
         FluentFile::new(folder.into(), name.as_ref(), Some(ext.as_ref().to_string()))
     }
 
@@ -67,7 +74,19 @@ impl FluentFile {
         self.ext.clone()
     }
 
+    pub fn copy_to(&self, to: &FluentFile) -> Result<FluentFile, FileCopyToError> {
+        to.parent().ensure_exists();
+        fs::copy(self.utf8_path_buf(), to.utf8_path_buf())
+            .map(|_| to.clone())
+            .map_err(|io_error| FileCopyToError {
+                from: self.utf8_path_buf(),
+                to: to.utf8_path_buf(),
+                io_error,
+            })
+    }
+
     pub fn move_to(&self, to: &FluentFile) -> Result<FluentFile, FileMoveToError> {
+        to.parent().ensure_exists();
         fs::rename(self.utf8_path_buf(), to.utf8_path_buf())
             .map(|_| to.clone())
             .map_err(|io_error| FileMoveToError {
@@ -78,13 +97,13 @@ impl FluentFile {
     }
 
     pub fn metadata(&self) -> Result<FileMetadata, FileMetaDataError> {
-        let metadata = self
-            .utf8_path_buf()
-            .metadata()
-            .map_err(|io_error| FileMetaDataError {
-                path: self.utf8_path_buf(),
-                io_error,
-            })?;
+        let metadata =
+            self.utf8_path_buf()
+                .metadata()
+                .map_err(|io_error| FileMetaDataError {
+                    path: self.utf8_path_buf(),
+                    io_error,
+                })?;
 
         let modified = metadata.modified().unwrap_or_else(|cause| {
             panic!("File {self} has MetaData but could not access modified time due to IO Error: {cause:#?}.");
@@ -96,14 +115,23 @@ impl FluentFile {
 
         Ok(FileMetadata {
             bytes: metadata.len(),
-            modified: file_system_time_to_timestamp(self.to_string(), "modified", modified)
-                .unwrap_or_else(|| panic!("File at '{self}' must have modified time!")),
-            accessed: file_system_time_to_timestamp(self.to_string(), "accessed", created),
+            modified: file_system_time_to_timestamp(
+                self.to_string(),
+                "modified",
+                modified,
+            )
+            .unwrap_or_else(|| panic!("File at '{self}' must have modified time!")),
+            accessed: file_system_time_to_timestamp(
+                self.to_string(),
+                "accessed",
+                created,
+            ),
             created: file_system_time_to_timestamp(self.to_string(), "created", created),
         })
     }
 
     pub fn write_data(&self, data: impl AsRef<[u8]>) -> Result<(), FileWriteDataError> {
+        self.parent().ensure_exists();
         fs::write(self.utf8_path_buf(), data).map_err(|io_error| FileWriteDataError {
             path: self.utf8_path_buf(),
             io_error,
@@ -147,6 +175,13 @@ impl FileActions for FluentFile {
 
     fn with_folder(&self, folder: impl Into<Folder>) -> Self {
         FluentFile::new(folder.into(), self.name.clone(), self.ext.clone())
+    }
+
+    fn remove(self) -> Result<(), FileRemoveError> {
+        fs::remove_file(self.utf8_path_buf()).map_err(|io_error| FileRemoveError {
+            path: self.utf8_path_buf(),
+            io_error,
+        })
     }
 }
 

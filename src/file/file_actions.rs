@@ -1,6 +1,6 @@
 use camino::Utf8PathBuf;
 
-use crate::folder::Folder;
+use crate::{file::FileRemoveError, folder::Folder};
 
 pub trait FileActions {
     fn name(&self) -> String;
@@ -10,6 +10,7 @@ pub trait FileActions {
     fn exists(&self) -> bool;
     fn with_name(&self, other_name: impl AsRef<str>) -> Self;
     fn with_folder(&self, folder: impl Into<Folder>) -> Self;
+    fn remove(self) -> Result<(), FileRemoveError>;
 }
 
 #[cfg(test)]
