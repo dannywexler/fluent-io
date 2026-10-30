@@ -65,7 +65,7 @@ impl VideoFile {
 
     pub fn metadata(
         &self,
-        ffprobe: &FfprobeBinary,
+        ffprobe: FfprobeBinary,
     ) -> Result<VideoMetaData, VideoMetaDataError> {
         let file_metadata =
             self.inner
@@ -77,9 +77,9 @@ impl VideoFile {
                     )),
                 })?;
 
-        let ffprobe_cmd = ffprobe
-            .cmd()
-            .args([
+        let ffprobe_cmd_output = ffprobe
+            .clone()
+            .add_args([
                 "-v",
                 "error",
                 "-show_format",
@@ -94,12 +94,10 @@ impl VideoFile {
                 cause: Box::new(VideoMetaDataErrorCause::Ffprobe(fcmd_err)),
             })?;
 
-        let ffprobe_output: Value =
-            serde_json::from_str(&ffprobe_cmd.stdout).map_err(|srde| {
-                VideoMetaDataError {
-                    path: self.utf8_path_buf(),
-                    cause: Box::new(VideoMetaDataErrorCause::Serde(srde)),
-                }
+        let ffprobe_output: Value = serde_json::from_str(&ffprobe_cmd_output.stdout)
+            .map_err(|srde| VideoMetaDataError {
+                path: self.utf8_path_buf(),
+                cause: Box::new(VideoMetaDataErrorCause::Serde(srde)),
             })?;
 
         let format_stream: FormatStream =
@@ -120,6 +118,7 @@ impl VideoFile {
                 })?;
 
         Ok(VideoMetaData {
+            accessed: file_metadata.accessed,
             bit_rate: format_stream.bit_rate,
             bytes: file_metadata.bytes,
             codec: video_stream.codec_name,
@@ -131,7 +130,7 @@ impl VideoFile {
         })
     }
 
-    pub fn extract_frame(&self, ffmpeg: &FfmpegBinary) -> ExtractFrameBuilder {
+    pub fn extract_frame(&self, ffmpeg: FfmpegBinary) -> ExtractFrameBuilder {
         ExtractFrameBuilder::new(self, ffmpeg)
     }
 }
@@ -233,6 +232,7 @@ impl Display for VideoFormat {
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct VideoMetaData {
+    pub accessed: Option<Timestamp>,
     pub bit_rate: u32,
     pub bytes: u64,
     pub codec: VideoCodec,
@@ -359,10 +359,10 @@ pub struct ExtractFrameBuilder {
 }
 
 impl ExtractFrameBuilder {
-    pub fn new(source_video: &VideoFile, ffmpeg: &FfmpegBinary) -> Self {
+    pub fn new(source_video: &VideoFile, ffmpeg: FfmpegBinary) -> Self {
         ExtractFrameBuilder {
             source_video: source_video.to_owned(),
-            ffmpeg: ffmpeg.to_owned(),
+            ffmpeg,
             image_format: ImageFormat::Avif,
             image_folder: source_video.parent().clone(),
             image_name: source_video.name(),
@@ -410,8 +410,8 @@ impl ExtractFrameBuilder {
             self.image_format,
         );
 
-        let mut fcmd = self.ffmpeg.cmd();
-        fcmd.args([
+        let mut fcmd = self.ffmpeg.clone();
+        fcmd.add_args([
             "-v",
             "error",
             "-ss",
@@ -432,7 +432,7 @@ impl ExtractFrameBuilder {
         };
 
         if let Some(scale_inner) = scale {
-            fcmd.args(["-vf", format!("scale={scale_inner}").as_str()]);
+            fcmd.add_args(["-vf", format!("scale={scale_inner}").as_str()]);
         }
 
         fcmd.read().map_err(|cause| VideoExtractFrameError {

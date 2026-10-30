@@ -99,6 +99,12 @@ impl From<Utf8PathBuf> for Folder {
     }
 }
 
+impl From<Folder> for PathBuf {
+    fn from(value: Folder) -> Self {
+        value.0.into_std_path_buf()
+    }
+}
+
 impl FolderActions for Folder {
     fn current() -> Self {
         must_get_current_dir().into()

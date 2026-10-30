@@ -122,7 +122,7 @@ impl FileActions for ImageFile {
 }
 
 fn must_get_image_format_ext(image_format: ImageFormat) -> &'static str {
-    image_format.extensions_str().first().expect(
-        "Cannot handle unknown image format without at least one extension returned by .extensions_str()",
+    image_format.extensions_str().first().unwrap_or_else(|| panic!(
+        "Cannot handle image format {image_format:?} that does not return at least one extension when calling .extensions_str()"),
     )
 }

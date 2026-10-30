@@ -53,7 +53,7 @@ impl VideoFile {
     pub fn phash(
         &self,
         video_duration: &Duration,
-        ffmpeg: &FfmpegBinary,
+        ffmpeg: FfmpegBinary,
     ) -> Result<VideoPhash, VideoPhashError> {
         let dest_folder = Folder::temp()
             .folder("phashes")
@@ -114,7 +114,7 @@ mod tests {
         }
         let vfile_meta =
             vfile
-                .metadata(&FfprobeBinary::find().unwrap())
+                .metadata(FfprobeBinary::find().unwrap())
                 .map_err(|vfile_mtaerr| {
                     eprintln!("Could not get video metadata for {vfile}");
                     eprintln!("{vfile_mtaerr:#?}");
@@ -123,7 +123,7 @@ mod tests {
                 })?;
         println!("Got video metadata for {vfile}:");
         println!("{vfile_meta:#?}");
-        match vfile.phash(&vfile_meta.duration, &FfmpegBinary::find().unwrap()) {
+        match vfile.phash(&vfile_meta.duration, FfmpegBinary::find().unwrap()) {
             Ok(vid_phash) => println!("Got valid vid_phash: {vid_phash:#?}"),
             Err(vph_error) => println!("Got vid_phash_error: {vph_error:#?}"),
         };

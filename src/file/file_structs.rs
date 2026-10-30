@@ -37,7 +37,7 @@ impl FluentFile {
         }
     }
 
-    pub fn named(
+    pub fn new_with_ext(
         folder: impl Into<Folder>,
         name: impl AsRef<str>,
         ext: impl AsRef<str>,
@@ -45,7 +45,7 @@ impl FluentFile {
         FluentFile::new(folder.into(), name.as_ref(), Some(ext.as_ref().to_string()))
     }
 
-    pub fn named_no_ext(folder: impl Into<Folder>, name: impl AsRef<str>) -> Self {
+    pub fn new_no_ext(folder: impl Into<Folder>, name: impl AsRef<str>) -> Self {
         FluentFile::new(folder.into(), name.as_ref(), None::<String>)
     }
 
@@ -105,28 +105,33 @@ impl FluentFile {
                     io_error,
                 })?;
 
-        let modified = metadata.modified().unwrap_or_else(|cause| {
+        let modified_systime = metadata.modified().unwrap_or_else(|cause| {
             panic!("File {self} has MetaData but could not access modified time due to IO Error: {cause:#?}.");
         });
 
-        let created = metadata.created().unwrap_or_else(|cause| {
+        let modified =
+            file_system_time_to_timestamp(self.to_string(), "modified", modified_systime)
+                .unwrap_or_else(|| panic!("File at '{self}' must have modified time!"));
+
+        let accessed_systime = metadata.accessed().unwrap_or_else(|cause| {
+            panic!("File {self} has MetaData but could not access accessed time due to IO Error: {cause:#?}.");
+        });
+
+        let accessed =
+            file_system_time_to_timestamp(self.to_string(), "accessed", accessed_systime);
+
+        let created_systime = metadata.created().unwrap_or_else(|cause| {
             panic!("File {self} has MetaData but could not access created time due to IO Error: {cause:#?}.");
         });
 
+        let created =
+            file_system_time_to_timestamp(self.to_string(), "created", created_systime);
+
         Ok(FileMetadata {
+            accessed,
             bytes: metadata.len(),
-            modified: file_system_time_to_timestamp(
-                self.to_string(),
-                "modified",
-                modified,
-            )
-            .unwrap_or_else(|| panic!("File at '{self}' must have modified time!")),
-            accessed: file_system_time_to_timestamp(
-                self.to_string(),
-                "accessed",
-                created,
-            ),
-            created: file_system_time_to_timestamp(self.to_string(), "created", created),
+            created,
+            modified,
         })
     }
 
@@ -187,10 +192,10 @@ impl FileActions for FluentFile {
 
 #[derive(Debug)]
 pub struct FileMetadata {
-    pub bytes: u64,
-    pub modified: Timestamp,
     pub accessed: Option<Timestamp>,
+    pub bytes: u64,
     pub created: Option<Timestamp>,
+    pub modified: Timestamp,
 }
 
 fn file_system_time_to_timestamp(

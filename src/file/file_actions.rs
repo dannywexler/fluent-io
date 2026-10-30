@@ -22,9 +22,9 @@ mod tests {
     fn test_file_name_ext() {
         let files = [
             FluentFile::new(Folder::current(), "Cargo", Some("toml")),
-            FluentFile::named(Folder::current(), "Cargo", "toml"),
+            FluentFile::new_with_ext(Folder::current(), "Cargo", "toml"),
             FluentFile::new(Folder::current(), "Cargo", None::<String>),
-            FluentFile::named_no_ext(Folder::current(), "Cargo"),
+            FluentFile::new_no_ext(Folder::current(), "Cargo"),
         ];
         for f in files {
             let name = f.name();
