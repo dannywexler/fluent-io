@@ -22,6 +22,7 @@ pub struct ImageFile {
 }
 
 impl ImageFile {
+    /// Creates a new [`ImageFile`] in a folder, with a name and [`ImageFormat`]
     pub fn new(
         folder: impl Into<Folder>,
         name: impl AsRef<str>,
@@ -37,6 +38,9 @@ impl ImageFile {
         }
     }
 
+    /// Finds all image files (recursively) in the provided folder using [`walkdir::WalkDir`].
+    /// Skips any entry with an error, or whose file_type is not a file, or whose extension
+    /// is not an image file extension
     pub fn find_all(folder: impl Into<Folder>) -> impl Iterator<Item = ImageFile> {
         FluentFile::find_all(folder).filter_map(|ff| {
             let ffext = ff.ext()?;
@@ -45,26 +49,34 @@ impl ImageFile {
         })
     }
 
+    /// Gets the image format
     pub fn format(&self) -> ImageFormat {
         self.format
     }
 
+    /// Gets the image format's extension
     pub fn ext(&self) -> &'static str {
         must_get_image_format_ext(self.format)
     }
 
+    /// Copies the file to another location.
+    /// Before copying, ensures that the destination file's folder exists
     pub fn copy_to(&self, to: &Self) -> Result<Self, FileCopyToError> {
         self.inner.copy_to(&to.inner).map(|_| to.clone())
     }
 
+    /// Moves the file to another location
+    /// Before moving, ensures that the destination file's folder exists
     pub fn move_to(&self, to: &Self) -> Result<Self, FileMoveToError> {
         self.inner.move_to(&to.inner).map(|_| to.clone())
     }
 
+    /// Gets the image's mime_type
     pub fn mime_type(&self) -> &'static str {
         self.format.to_mime_type()
     }
 
+    /// Tries to open the image and returns a [`DynamicImage`] if successful
     pub fn open(&self) -> Result<DynamicImage, ImageOpenError> {
         image::open(self.to_string()).map_err(|image_error| ImageOpenError {
             path: self.utf8_path_buf(),

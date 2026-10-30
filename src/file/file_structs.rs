@@ -25,6 +25,7 @@ pub struct FluentFile {
 }
 
 impl FluentFile {
+    /// Creates a new [`FluentFile`] in a [`Folder`], with a name and optional extension
     pub fn new(
         folder: impl Into<Folder>,
         name: impl AsRef<str>,
@@ -37,6 +38,7 @@ impl FluentFile {
         }
     }
 
+    /// Creates a new [`FluentFile`] in a [`Folder`], with a name and extension
     pub fn new_with_ext(
         folder: impl Into<Folder>,
         name: impl AsRef<str>,
@@ -45,10 +47,13 @@ impl FluentFile {
         FluentFile::new(folder.into(), name.as_ref(), Some(ext.as_ref().to_string()))
     }
 
+    /// Creates a new [`FluentFile`] in a [`Folder`], with a name and without an extension
     pub fn new_no_ext(folder: impl Into<Folder>, name: impl AsRef<str>) -> Self {
         FluentFile::new(folder.into(), name.as_ref(), None::<String>)
     }
 
+    /// Finds all files (recursively) in a [`Folder`] using [`WalkDir`]. Skips any entry with an
+    /// error, or any entry whose file_type is not a file
     pub fn find_all(folder: impl Into<Folder>) -> impl Iterator<Item = FluentFile> {
         WalkDir::new(folder.into().utf8_path_buf())
             .sort_by_file_name()
@@ -70,10 +75,13 @@ impl FluentFile {
             })
     }
 
+    /// Gets the file extension
     pub fn ext(&self) -> Option<String> {
         self.ext.clone()
     }
 
+    /// Copies the file to another location.
+    /// Before copying, ensures that the destination file's folder exists
     pub fn copy_to(&self, to: &FluentFile) -> Result<FluentFile, FileCopyToError> {
         to.parent().ensure_exists();
         fs::copy(self.utf8_path_buf(), to.utf8_path_buf())
@@ -85,6 +93,8 @@ impl FluentFile {
             })
     }
 
+    /// Moves the file to another location
+    /// Before moving, ensures that the destination file's folder exists
     pub fn move_to(&self, to: &FluentFile) -> Result<FluentFile, FileMoveToError> {
         to.parent().ensure_exists();
         fs::rename(self.utf8_path_buf(), to.utf8_path_buf())
@@ -96,6 +106,10 @@ impl FluentFile {
             })
     }
 
+    /// Gets the metadata for the file
+    /// This is a similar to [`std::fs::metadata`] returning [`std::fs::Metadata`], except
+    /// this method returns [`FileMetadata`] instead, which uses [`jiff::Timestamp`] instead
+    /// of [`SystemTime`]
     pub fn metadata(&self) -> Result<FileMetadata, FileMetaDataError> {
         let metadata =
             self.utf8_path_buf()
@@ -135,6 +149,8 @@ impl FluentFile {
         })
     }
 
+    /// Writes data (String or bytes or anything that can be converted to bytes) to this file
+    /// Before writing, ensures the file's folder exists
     pub fn write_data(&self, data: impl AsRef<[u8]>) -> Result<(), FileWriteDataError> {
         self.parent().ensure_exists();
         fs::write(self.utf8_path_buf(), data).map_err(|io_error| FileWriteDataError {

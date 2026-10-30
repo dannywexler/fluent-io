@@ -16,6 +16,11 @@ static TILDE: &str = "~";
 pub struct Folder(Utf8PathBuf);
 
 impl Folder {
+    /// Creates a [`Folder`] referring to an absolute path
+    /// If the provided path is absolute, uses it directly
+    /// If the provided path starts with `~`, then replaces the `~` with the
+    /// [`std::env::home_dir`] folder, and joins the home folder with the rest of the provided path
+    /// If the provided path is not absolute, joins it with [`std::env::current_dir`]
     pub fn new(path: impl AsRef<Path>) -> Folder {
         let path = path.as_ref().to_string_lossy();
         let abs_path = if path.starts_with(TILDE) {
@@ -35,6 +40,8 @@ impl Folder {
         )
     }
 
+    /// Finds all child folders of this folder using [`WalkDir`]. Skips any entry with an
+    /// error, or any entry whose file_type is not a dir
     pub fn child_folders(
         &self,
         min_depth: usize,

@@ -28,6 +28,7 @@ pub struct VideoFile {
 }
 
 impl VideoFile {
+    /// Creates a new [`VideoFile`] in a folder, with a name and [`VideoFormat`]
     pub fn new(
         folder: impl Into<Folder>,
         name: impl AsRef<str>,
@@ -39,6 +40,9 @@ impl VideoFile {
         }
     }
 
+    /// Finds all video files (recursively) in the provided folder using [`walkdir::WalkDir`].
+    /// Skips any entry with an error, or whose file_type is not a file, or whose extension
+    /// is not a video file extension
     pub fn find_all(folder: impl Into<Folder>) -> impl Iterator<Item = VideoFile> {
         FluentFile::find_all(folder).filter_map(|ff| {
             let ffext = ff.ext()?;
@@ -47,22 +51,34 @@ impl VideoFile {
         })
     }
 
+    /// Gets the video format
     pub fn format(&self) -> VideoFormat {
         self.format
     }
 
+    /// Gets the video format's extension
     pub fn ext(&self) -> String {
         self.format.to_string()
     }
 
+    /// Copies the file to another location.
+    /// Before copying, ensures that the destination file's folder exists
     pub fn copy_to(&self, to: &Self) -> Result<Self, FileCopyToError> {
         self.inner.copy_to(&to.inner).map(|_| to.clone())
     }
 
+    /// Moves the file to another location
+    /// Before moving, ensures that the destination file's folder exists
     pub fn move_to(&self, to: &Self) -> Result<Self, FileMoveToError> {
         self.inner.move_to(&to.inner).map(|_| to.clone())
     }
 
+    /// Gets the video's metadata
+    ///
+    /// Combines [`crate::file::FileMetadata`] with additional metadata returned by
+    /// `ffprobe`.
+    ///
+    /// Requires an already-located `ffprobe` binary returned by calling [`FfprobeBinary::find`]
     pub fn metadata(
         &self,
         ffprobe: FfprobeBinary,
@@ -130,6 +146,12 @@ impl VideoFile {
         })
     }
 
+    /// Extract a frame from this video file
+    ///
+    /// Requires an already-located `ffmpeg` binary returned by calling [`FfmpegBinary::find`]
+    ///
+    /// Returns an [`ExtractFrameBuilder`] that allows setting custom options before
+    /// extracting the frame
     pub fn extract_frame(&self, ffmpeg: FfmpegBinary) -> ExtractFrameBuilder {
         ExtractFrameBuilder::new(self, ffmpeg)
     }

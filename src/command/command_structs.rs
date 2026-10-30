@@ -16,6 +16,7 @@ pub struct FluentCommand {
 }
 
 impl FluentCommand {
+    /// Tries to find the executable path for the binary name using [which](https://docs.rs/which/latest/which/fn.which.html)
     pub fn find(binary_name: impl AsRef<Path>) -> Option<Self> {
         which::which(binary_name.as_ref())
             .ok()
@@ -26,19 +27,23 @@ impl FluentCommand {
             })
     }
 
+    /// Get the path to the binary
     pub fn cmd(&self) -> PathBuf {
         self.cmd.clone()
     }
 
+    /// Get iterator over the args
     pub fn args(&self) -> impl Iterator<Item = String> {
         self.args.clone().into_iter()
     }
 
+    /// Add an additional arg
     pub fn add_arg(&mut self, arg: impl AsRef<str>) -> &mut Self {
         self.args.push(arg.as_ref().to_string());
         self
     }
 
+    /// Add multiple additional args
     pub fn add_args(
         &mut self,
         args: impl IntoIterator<Item = impl AsRef<str>>,
@@ -49,15 +54,20 @@ impl FluentCommand {
         self
     }
 
+    /// Get the custom folder to run the command in, if specified by calling `set_folder`
     pub fn folder(&self) -> Option<PathBuf> {
         self.custom_folder.clone()
     }
 
+    /// Set the custom folder to run the command in
     pub fn set_folder(&mut self, new_folder: impl Into<Folder>) -> &mut Self {
         self.custom_folder = Some(new_folder.into().into());
         self
     }
 
+    /// Execute the command, then collect and return its standard out and standard error
+    ///
+    /// This will not print anything to the console
     pub fn read(&mut self) -> Result<CommandOutput, CommandReadError> {
         let input = CommandInput {
             cmd: self.cmd.clone(),
@@ -102,6 +112,8 @@ impl FluentCommand {
         }
     }
 
+    /// Execute the command, streaming its stdout and stderr to the console as the command
+    /// runs
     pub fn run(&mut self) -> Result<(), CommandRunError> {
         let input = CommandInput {
             cmd: self.cmd.clone(),
