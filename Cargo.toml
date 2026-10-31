@@ -2,6 +2,7 @@
 categories = ["filesystem", "multimedia::images", "multimedia::video"]
 description = "A library designed to make IO operations involving commands, files and folders easier"
 edition = "2024"
+exclude = ["/test_data"]
 keywords = ["command", "file", "folder", "io"]
 license = "MIT"
 name = "fluent-io"
