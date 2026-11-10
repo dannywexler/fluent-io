@@ -110,7 +110,7 @@ impl Display for Hurl {
         output.push_str(&self.host().to_string());
         output.push_str(&self.path_str());
         if let Some(qs) = self.query() {
-            output.push_str("?");
+            output.push('?');
             output.push_str(&qs);
         }
         write!(f, "{output}")

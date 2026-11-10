@@ -521,10 +521,12 @@ dependencies = [
 name = "fluent-io"
 version = "0.1.0"
 dependencies = [
+ "bytes",
  "camino",
  "image",
  "imghash",
  "jiff",
+ "mime",
  "monostate",
  "reqwest",
  "serde",

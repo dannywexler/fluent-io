@@ -10,10 +10,12 @@ repository = "https://github.com/dannywexler/fluent-io"
 version = "0.1.0"
 
 [dependencies]
+bytes = "1.12.1"
 camino = "1.2.5"
 image = "0.25.10"
 imghash = "2.0.0"
 jiff = { version = "0.2.37", features = ["serde"] }
+mime = "0.3.18"
 monostate = "1.0.3"
 reqwest = "0.13.5"
 serde = { version = "1.0.229", features = ["derive"] }

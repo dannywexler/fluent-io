@@ -1,9 +1,12 @@
 use std::ops::{Deref, DerefMut};
 
-use reqwest::Client;
+use reqwest::{Client, Response};
+use serde::de::DeserializeOwned;
 use serde_json::Value;
 
-use crate::url::Hurl;
+use crate::{fetch::headers::ResponseHeaders, url::Hurl};
+
+pub mod headers;
 
 pub struct FluentFetch {
     hurl: Hurl,
@@ -27,7 +30,7 @@ impl FluentFetch {
         self
     }
 
-    pub async fn send_get(&self) -> serde_json::Value {
+    pub async fn send_get<T: DeserializeOwned>(&self) -> Result<T, serde_json::Error> {
         let res = self
             .client
             .get(self.hurl.to_string())
@@ -46,38 +49,45 @@ impl FluentFetch {
             .replace("-", "")
             .replace("'", "");
 
-        let response_headers = res.headers().clone();
-        let bytes = res.bytes().await.expect("Can get bytes");
-        if let Some(content_type) = response_headers
-            .get("Content-Type")
-            .and_then(|ct| ct.to_str().ok())
-        {
-            if content_type.starts_with("text/") {
-                return serde_json::json!({
-                    status_text: {
-                        "status": status_code,
-                        "body": String::from_utf8(bytes.to_vec()).expect("Can read body as utf8 string"),
-                    }
-                });
-            } else if content_type.contains("json") {
-                let body: Value =
-                    serde_json::from_slice(&bytes).expect("Can read body as json");
-                return serde_json::json!({
-                    status_text: {
-                        "status": status_code,
-                        "body": body,
-                    }
-                });
-            }
-        }
-        let bytes_vec: Vec<u8> = bytes.into();
-        serde_json::json!({
+        let request_url_str = self.hurl.to_string();
+        let response_url_str = res.url().to_string();
+        let response_headers: ResponseHeaders = res.headers().clone().into();
+        let body = resolve_body_value(res).await;
+        serde_json::from_value(serde_json::json!({
             status_text: {
-                "status": status_code,
-                "body": bytes_vec,
+                "body": body,
+                "request_url": request_url_str,
+                "response_headers": response_headers,
+                "response_url": response_url_str,
+                "status_code": status_code,
             }
-        })
+        }))
     }
+}
+
+async fn resolve_body_value(response: Response) -> serde_json::Value {
+    let response_headers: ResponseHeaders = response.headers().clone().into();
+    let bytes = response.bytes().await.expect("Can read body bytes");
+    if let Ok(content_type) = response_headers.content_type() {
+        if content_type.type_() == "text" {
+            return String::from_utf8(bytes.to_vec())
+                .expect("Can read body as text")
+                .into();
+        }
+        if content_type.subtype().as_str().ends_with("json")
+            || if let Some(suffix) = content_type.suffix() {
+                suffix == "json"
+            } else {
+                false
+            }
+        {
+            let body: Value =
+                serde_json::from_slice(&bytes).expect("Can read body as json");
+            return body;
+        }
+    }
+    let bytes_vec: Vec<u8> = bytes.into();
+    bytes_vec.into()
 }
 
 impl From<Hurl> for FluentFetch {
@@ -104,7 +114,7 @@ impl DerefMut for FluentFetch {
 mod tests {
     use serde::Deserialize;
 
-    use crate::fetch::FluentFetch;
+    use crate::fetch::{FluentFetch, headers::ResponseHeaders};
 
     #[derive(Debug, Deserialize)]
     #[allow(unused)]
@@ -116,8 +126,14 @@ mod tests {
 
     #[derive(Debug, Deserialize)]
     enum UserResponses {
-        OK { body: User },
-        NotFound {},
+        OK {
+            body: User,
+        },
+        NotFound {
+            request_url: String,
+            response_headers: ResponseHeaders,
+            response_url: String,
+        },
     }
 
     #[tokio::test]
@@ -128,9 +144,7 @@ mod tests {
             let mut ff = FluentFetch::parse_base_url(prefix).expect("valid url");
             ff.add_path_seg(id);
             println!("Fetching url: {}", ff.to_string());
-            let res_value = ff.send_get().await;
-            println!("Got res_value:\n{res_value:#?}");
-            match serde_json::from_value::<UserResponses>(res_value) {
+            match ff.send_get::<UserResponses>().await {
                 Ok(responses) => {
                     match responses {
                         UserResponses::OK { body } => {
@@ -138,9 +152,16 @@ mod tests {
                                 println!("Got user:\n{body:#?}");
                             }
                         }
-                        UserResponses::NotFound {} => {
+                        UserResponses::NotFound {
+                            response_headers,
+                            request_url,
+                            response_url,
+                        } => {
                             if invalid {
                                 println!("No user found with id {id}");
+                                println!("request_url: {request_url}");
+                                println!("response_url: {response_url}");
+                                println!("ResponseHeaders:\n{}", response_headers);
                             }
                         }
                     };
@@ -185,10 +206,7 @@ mod tests {
             let mut ff = FluentFetch::parse_base_url(prefix).expect("valid url");
             ff.add_path_seg(suffix);
             println!("Fetching url: {}", ff.to_string());
-            let res_value = ff.send_get().await;
-            println!("Got res_value:\n{res_value:#?}");
-            let res_enum: TextResponses =
-                serde_json::from_value(res_value).expect("Can parse as text");
+            let res_enum: TextResponses = ff.send_get().await.expect("Can parse as text");
 
             match res_enum {
                 TextResponses::OK { body } => {
@@ -212,15 +230,14 @@ mod tests {
 
     #[tokio::test]
     async fn test_fetch_bytes() {
-        let res_value = FluentFetch::parse_base_url("https://dummyjson.com/image/10")
-            .expect("Valid url")
-            .send_get()
-            .await;
-        println!("Got res_value:\n{res_value:?}");
-        let parsed_response: BytesResponses =
-            serde_json::from_value(res_value).expect("Can parse as bytes");
+        let bytes_res: BytesResponses =
+            FluentFetch::parse_base_url("https://dummyjson.com/image/10")
+                .expect("Valid url")
+                .send_get()
+                .await
+                .expect("Can parse as bytes");
 
-        match parsed_response {
+        match bytes_res {
             BytesResponses::OK { body } => {
                 println!("Got bytes:\n{body:?}");
             }
