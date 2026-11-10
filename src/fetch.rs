@@ -1,8 +1,10 @@
-use std::ops::{Deref, DerefMut};
+use std::{
+    ops::{Deref, DerefMut},
+    string::FromUtf8Error,
+};
 
 use reqwest::{Client, Response};
 use serde::de::DeserializeOwned;
-use serde_json::Value;
 
 use crate::{fetch::headers::ResponseHeaders, url::Hurl};
 
@@ -30,49 +32,77 @@ impl FluentFetch {
         self
     }
 
-    pub async fn send_get<T: DeserializeOwned>(&self) -> Result<T, serde_json::Error> {
+    pub async fn send_get<T: DeserializeOwned>(&self) -> Result<T, FetchError> {
         let res = self
             .client
             .get(self.hurl.to_string())
             .send()
             .await
-            .expect("Can send request");
+            .map_err(|reqwest_error| FetchError {
+                request_url: self.hurl.to_string(),
+                cause: FetchErrorCause::SendRequest { reqwest_error },
+            })?;
         let status = res.status();
         let status_code = status.as_u16();
 
-        let backup_text = format!("Unknown{status_code}");
-        let backup_text = backup_text.as_str();
+        let fallback_status_text = format!("Unknown{status_code}");
+        let fallback_text = fallback_status_text.as_str();
         let status_text = status
             .canonical_reason()
-            .unwrap_or(backup_text)
+            .unwrap_or(fallback_text)
             .replace(" ", "")
             .replace("-", "")
             .replace("'", "");
+        let status_text_clone = status_text.clone();
 
-        let request_url_str = self.hurl.to_string();
         let response_url_str = res.url().to_string();
         let response_headers: ResponseHeaders = res.headers().clone().into();
-        let body = resolve_body_value(res).await;
+        let body = resolve_body_value(res).await.map_err(|cause| FetchError {
+            request_url: self.hurl.to_string(),
+            cause,
+        })?;
         serde_json::from_value(serde_json::json!({
             status_text: {
                 "body": body,
-                "request_url": request_url_str,
+                "request_url": self.hurl.to_string(),
                 "response_headers": response_headers,
                 "response_url": response_url_str,
                 "status_code": status_code,
             }
         }))
+        .map_err(|serde_json_error| {
+            let cause = if format!("{serde_json_error}").starts_with("unknown variant") {
+                FetchErrorCause::UnhandledStatus {
+                    status_code,
+                    status_text: status_text_clone,
+                    serde_json_error,
+                }
+            } else {
+                FetchErrorCause::JsonSchemaMismatch { serde_json_error }
+            };
+            FetchError {
+                request_url: self.hurl.to_string(),
+                cause,
+            }
+        })
     }
 }
 
-async fn resolve_body_value(response: Response) -> serde_json::Value {
+async fn resolve_body_value(
+    response: Response,
+) -> Result<serde_json::Value, FetchErrorCause> {
     let response_headers: ResponseHeaders = response.headers().clone().into();
-    let bytes = response.bytes().await.expect("Can read body bytes");
+    let bytes = response
+        .bytes()
+        .await
+        .map_err(|reqwest_error| FetchErrorCause::ReadBody { reqwest_error })?;
     if let Ok(content_type) = response_headers.content_type() {
         if content_type.type_() == "text" {
-            return String::from_utf8(bytes.to_vec())
-                .expect("Can read body as text")
-                .into();
+            return Ok(String::from_utf8(bytes.to_vec())
+                .map_err(|from_utf8_error| FetchErrorCause::ReadBodyAsText {
+                    from_utf8_error,
+                })?
+                .into());
         }
         if content_type.subtype().as_str().ends_with("json")
             || if let Some(suffix) = content_type.suffix() {
@@ -81,13 +111,13 @@ async fn resolve_body_value(response: Response) -> serde_json::Value {
                 false
             }
         {
-            let body: Value =
-                serde_json::from_slice(&bytes).expect("Can read body as json");
-            return body;
+            return Ok(serde_json::from_slice(&bytes).map_err(|serde_json_error| {
+                FetchErrorCause::ReadBodyAsJson { serde_json_error }
+            })?);
         }
     }
     let bytes_vec: Vec<u8> = bytes.into();
-    bytes_vec.into()
+    Ok(bytes_vec.into())
 }
 
 impl From<Hurl> for FluentFetch {
@@ -110,9 +140,40 @@ impl DerefMut for FluentFetch {
     }
 }
 
+#[derive(Debug)]
+pub struct FetchError {
+    pub request_url: String,
+    pub cause: FetchErrorCause,
+}
+
+#[derive(Debug)]
+pub enum FetchErrorCause {
+    SendRequest {
+        reqwest_error: reqwest::Error,
+    },
+    ReadBody {
+        reqwest_error: reqwest::Error,
+    },
+    ReadBodyAsText {
+        from_utf8_error: FromUtf8Error,
+    },
+    ReadBodyAsJson {
+        serde_json_error: serde_json::Error,
+    },
+    UnhandledStatus {
+        status_code: u16,
+        status_text: String,
+        serde_json_error: serde_json::Error,
+    },
+    JsonSchemaMismatch {
+        serde_json_error: serde_json::Error,
+    },
+}
+
 #[cfg(test)]
 mod tests {
     use serde::Deserialize;
+    use serde_json::Value;
 
     use crate::fetch::{FluentFetch, headers::ResponseHeaders};
 
@@ -133,6 +194,7 @@ mod tests {
             request_url: String,
             response_headers: ResponseHeaders,
             response_url: String,
+            body: Value,
         },
     }
 
@@ -156,36 +218,22 @@ mod tests {
                             response_headers,
                             request_url,
                             response_url,
+                            body,
                         } => {
                             if invalid {
                                 println!("No user found with id {id}");
                                 println!("request_url: {request_url}");
                                 println!("response_url: {response_url}");
                                 println!("ResponseHeaders:\n{}", response_headers);
+                                println!("body:");
+                                println!("{body}");
                             }
                         }
                     };
                     assert!(true, "Parsing succeeded");
                 }
-                Err(serde_err) => {
-                    let category = if serde_err.is_io() {
-                        "io"
-                    } else if serde_err.is_syntax() {
-                        "syntax"
-                    } else if serde_err.is_data() {
-                        "data"
-                    } else {
-                        "eof"
-                    };
-                    println!("Serde err category: {category}");
-                    println!(
-                        "Serde err line: {}, column: {}",
-                        serde_err.line(),
-                        serde_err.column()
-                    );
-                    println!("Serde err msg: {serde_err}");
-                    println!("Serde err msg:? {serde_err:?}");
-                    println!("Serde err msg:#? {serde_err:#?}");
+                Err(fetch_err) => {
+                    println!("{fetch_err:#?}");
                     assert!(false, "Parsing failed");
                 }
             }
