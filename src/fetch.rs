@@ -98,7 +98,7 @@ async fn resolve_body_value(
         .map_err(|reqwest_error| FetchErrorCause::ReadBody { reqwest_error })?;
     if let Ok(content_type) = response_headers.content_type() {
         if content_type.type_() == "text" {
-            return Ok(String::from_utf8(bytes.to_vec())
+            return Ok(String::from_utf8(bytes.into())
                 .map_err(|from_utf8_error| FetchErrorCause::ReadBodyAsText {
                     from_utf8_error,
                 })?
@@ -111,9 +111,9 @@ async fn resolve_body_value(
                 false
             }
         {
-            return Ok(serde_json::from_slice(&bytes).map_err(|serde_json_error| {
+            return serde_json::from_slice(&bytes).map_err(|serde_json_error| {
                 FetchErrorCause::ReadBodyAsJson { serde_json_error }
-            })?);
+            });
         }
     }
     let bytes_vec: Vec<u8> = bytes.into();
@@ -175,7 +175,10 @@ mod tests {
     use serde::Deserialize;
     use serde_json::Value;
 
-    use crate::fetch::{FluentFetch, headers::ResponseHeaders};
+    use crate::fetch::{
+        FluentFetch,
+        headers::{RequestHeaders, ResponseHeaders},
+    };
 
     #[derive(Debug, Deserialize)]
     #[allow(unused)]
@@ -185,6 +188,12 @@ mod tests {
         pub email: String,
     }
 
+    // #[derive(Debug, Deserialize)]
+    // struct NotFoundHeaders {
+    //     content_length: String,
+    //     content_type: String,
+    // }
+
     #[derive(Debug, Deserialize)]
     enum UserResponses {
         OK {
@@ -193,6 +202,7 @@ mod tests {
         NotFound {
             request_url: String,
             response_headers: ResponseHeaders,
+            // response_headers: NotFoundHeaders,
             response_url: String,
             body: Value,
         },
