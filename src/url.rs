@@ -53,8 +53,8 @@ impl Hurl {
         self.host.clone()
     }
 
-    pub fn path_vec(&self) -> Vec<String> {
-        self.path.clone()
+    pub fn path_segments(&self) -> impl Iterator<Item = String> {
+        self.path.clone().into_iter()
     }
 
     pub fn path_str(&self) -> String {
@@ -77,7 +77,7 @@ impl Hurl {
         self
     }
 
-    pub fn add_path_seg(&mut self, path_segment: impl AsRef<str>) -> &mut Self {
+    pub fn add_path_segment(&mut self, path_segment: impl AsRef<str>) -> &mut Self {
         self.path.push(percent_encode(path_segment));
         self
     }

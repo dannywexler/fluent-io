@@ -18,12 +18,18 @@ impl Deref for ResponseHeaders {
 
 impl Display for ResponseHeaders {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", serde_json::to_string_pretty(&self).unwrap_or_else(|serde_err| panic!("Should be impossible to have an error serializing. Got error: {serde_err}")))
+        write!(f, "{}", self.0)
     }
 }
 
 impl From<HeaderMap> for ResponseHeaders {
     fn from(value: HeaderMap) -> Self {
-        ResponseHeaders(FluentHeaderMap::from(value))
+        ResponseHeaders(value.into())
+    }
+}
+
+impl From<ResponseHeaders> for HeaderMap {
+    fn from(value: ResponseHeaders) -> Self {
+        value.0.into()
     }
 }

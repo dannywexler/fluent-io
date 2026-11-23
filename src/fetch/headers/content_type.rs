@@ -1,6 +1,4 @@
-use mime::FromStrError;
-
 pub enum ContentTypeError {
     NotFound,
-    ParseError(FromStrError),
+    ParseError(mime::FromStrError),
 }

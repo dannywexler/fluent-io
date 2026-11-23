@@ -465,7 +465,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -527,6 +527,7 @@ dependencies = [
  "imghash",
  "jiff",
  "mime",
+ "mimetype-detector",
  "monostate",
  "reqwest",
  "serde",
@@ -1196,6 +1197,12 @@ name = "mime"
 version = "0.3.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d5848f5a9e8117cf94f2f90faac24a87ff81600ff8628c1e3deaab572e76bfa1"
+
+[[package]]
+name = "mimetype-detector"
+version = "0.3.14"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0d8d9b278a4137dcc2dc48e58d9cca0347440d87f91dd066910d2f9a0bf8d124"
 
 [[package]]
 name = "miniz_oxide"
