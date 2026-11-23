@@ -38,17 +38,6 @@ impl ImageFile {
         }
     }
 
-    /// Finds all image files (recursively) in the provided folder using [`walkdir::WalkDir`].
-    /// Skips any entry with an error, or whose file_type is not a file, or whose extension
-    /// is not an image file extension
-    pub fn find_all(folder: impl Into<Folder>) -> impl Iterator<Item = ImageFile> {
-        FluentFile::find_all(folder).filter_map(|ff| {
-            let ffext = ff.ext()?;
-            let format = ImageFormat::from_extension(ffext)?;
-            Some(ImageFile::new(ff.parent(), ff.name(), format))
-        })
-    }
-
     /// Gets the image format
     pub fn format(&self) -> ImageFormat {
         self.format
@@ -57,18 +46,6 @@ impl ImageFile {
     /// Gets the image format's extension
     pub fn ext(&self) -> &'static str {
         must_get_image_format_ext(self.format)
-    }
-
-    /// Copies the file to another location.
-    /// Before copying, ensures that the destination file's folder exists
-    pub fn copy_to(&self, to: &Self) -> Result<Self, FileCopyToError> {
-        self.inner.copy_to(&to.inner).map(|_| to.clone())
-    }
-
-    /// Moves the file to another location
-    /// Before moving, ensures that the destination file's folder exists
-    pub fn move_to(&self, to: &Self) -> Result<Self, FileMoveToError> {
-        self.inner.move_to(&to.inner).map(|_| to.clone())
     }
 
     /// Gets the image's mime_type
@@ -99,7 +76,7 @@ impl Display for ImageFile {
     }
 }
 
-impl FileActions for ImageFile {
+impl FileActions<ImageFile> for ImageFile {
     fn name(&self) -> String {
         self.inner.name()
     }
@@ -126,6 +103,22 @@ impl FileActions for ImageFile {
 
     fn with_folder(&self, folder: impl Into<Folder>) -> ImageFile {
         ImageFile::new(folder.into(), self.name(), self.format)
+    }
+
+    fn find_all(folder: impl Into<Folder>) -> impl Iterator<Item = ImageFile> {
+        FluentFile::find_all(folder).filter_map(|ff| {
+            let ffext = ff.ext()?;
+            let format = ImageFormat::from_extension(ffext)?;
+            Some(ImageFile::new(ff.parent(), ff.name(), format))
+        })
+    }
+
+    fn copy_to(&self, to: &Self) -> Result<Self, FileCopyToError> {
+        self.inner.copy_to(&to.inner).map(|_| to.clone())
+    }
+
+    fn move_to(&self, to: &Self) -> Result<Self, FileMoveToError> {
+        self.inner.move_to(&to.inner).map(|_| to.clone())
     }
 
     fn remove(self) -> Result<(), FileRemoveError> {

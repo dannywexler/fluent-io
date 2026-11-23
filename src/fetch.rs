@@ -222,13 +222,7 @@ async fn resolve_response_body_value(
             })?
             .into());
     }
-    if content_type.subtype().as_str().ends_with("json")
-        || if let Some(suffix) = content_type.suffix() {
-            suffix.as_str().ends_with("json")
-        } else {
-            false
-        }
-    {
+    if mime_is_jsonlike(&content_type) {
         return serde_json::from_slice(&bytes).map_err(|serde_json_error| {
             FetchErrorCause::ReadBodyAsJson { serde_json_error }
         });
@@ -237,11 +231,21 @@ async fn resolve_response_body_value(
     Ok(bytes_vec.into())
 }
 
-fn detect_mime(bytes: &[u8]) -> Mime {
+pub(crate) fn detect_mime(bytes: &[u8]) -> Mime {
     let detected_mime_str = mimetype_detector::detect(bytes).to_string();
     detected_mime_str
         .parse::<Mime>()
         .unwrap_or_else(|err| panic!("Should be impossible to have an error parsing a 'Mime' from a 'MimeType'.\nString to parse: {detected_mime_str}\nGot error: {err}"))
+}
+
+pub(crate) fn mime_is_jsonlike(mime: &Mime) -> bool {
+    if mime.subtype().as_str().ends_with("json") {
+        return true;
+    }
+    if let Some(suffix) = mime.suffix() {
+        return suffix.as_str().ends_with("json");
+    }
+    false
 }
 
 #[derive(Debug)]

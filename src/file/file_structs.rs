@@ -2,16 +2,20 @@ use core::fmt;
 use std::{
     fmt::{Display, Formatter},
     fs,
+    path::Path,
     time::SystemTime,
 };
 
 use camino::Utf8PathBuf;
 use jiff::Timestamp;
+use serde::de::DeserializeOwned;
 use walkdir::WalkDir;
 
 use crate::{
+    fetch::{detect_mime, mime_is_jsonlike},
     file::{
         FileActions, FileCopyToError, FileMetaDataError, FileMoveToError,
+        FilePathParseError, FileReadToStringError, FileReadToStructError,
         FileRemoveError, FileWriteDataError,
     },
     folder::{Folder, FolderActions},
@@ -52,58 +56,42 @@ impl FluentFile {
         FluentFile::new(folder.into(), name.as_ref(), None::<String>)
     }
 
-    /// Finds all files (recursively) in a [`Folder`] using [`WalkDir`]. Skips any entry with an
-    /// error, or any entry whose file_type is not a file
-    pub fn find_all(folder: impl Into<Folder>) -> impl Iterator<Item = FluentFile> {
-        WalkDir::new(folder.into().utf8_path_buf())
-            .sort_by_file_name()
-            .into_iter()
-            .filter_map(|dir_entry| {
-                let dir_ent = dir_entry.ok()?;
-                if !dir_ent.file_type().is_file() {
-                    return None;
-                }
-                let path = dir_ent.path();
+    /// Tries to parse a path into a FluentFile
+    ///
+    /// Can fail if path was not UTF8, was missing a parent folder or missing a name
+    pub fn parse_path(path: impl AsRef<Path>) -> Result<Self, FilePathParseError> {
+        let provided_path = path.as_ref().to_path_buf();
+        provided_path.to_str().ok_or(FilePathParseError::NotUTF8)?;
 
-                let folder = path.parent()?.to_str()?;
-                let name = path.file_stem()?.to_str()?;
-                let mut ext = None;
-                if let Some(os_str) = path.extension() {
-                    ext = Some(os_str.to_str()?);
-                }
-                Some(FluentFile::new(folder, name, ext))
-            })
+        let folder =
+            provided_path
+                .parent()
+                .ok_or_else(|| FilePathParseError::MissingParent {
+                    provided_path: provided_path.clone(),
+                })?;
+
+        let name = provided_path
+            .file_stem()
+            .ok_or_else(|| FilePathParseError::MissingName {
+                provided_path: provided_path.clone(),
+            })?
+            .to_string_lossy()
+            .to_string();
+
+        let ext = provided_path
+            .extension()
+            .map(|ext| ext.to_string_lossy().to_string());
+
+        Ok(Self {
+            folder: folder.into(),
+            name,
+            ext,
+        })
     }
 
     /// Gets the file extension
     pub fn ext(&self) -> Option<String> {
         self.ext.clone()
-    }
-
-    /// Copies the file to another location.
-    /// Before copying, ensures that the destination file's folder exists
-    pub fn copy_to(&self, to: &FluentFile) -> Result<FluentFile, FileCopyToError> {
-        to.parent().ensure_exists();
-        fs::copy(self.utf8_path_buf(), to.utf8_path_buf())
-            .map(|_| to.clone())
-            .map_err(|io_error| FileCopyToError {
-                from: self.utf8_path_buf(),
-                to: to.utf8_path_buf(),
-                io_error,
-            })
-    }
-
-    /// Moves the file to another location
-    /// Before moving, ensures that the destination file's folder exists
-    pub fn move_to(&self, to: &FluentFile) -> Result<FluentFile, FileMoveToError> {
-        to.parent().ensure_exists();
-        fs::rename(self.utf8_path_buf(), to.utf8_path_buf())
-            .map(|_| to.clone())
-            .map_err(|io_error| FileMoveToError {
-                from: self.utf8_path_buf(),
-                to: to.utf8_path_buf(),
-                io_error,
-            })
     }
 
     /// Gets the metadata for the file
@@ -158,6 +146,43 @@ impl FluentFile {
             io_error,
         })
     }
+
+    /// Reads file to string
+    pub fn read_to_string(&self) -> Result<String, FileReadToStringError> {
+        fs::read_to_string(self.utf8_path_buf()).map_err(|io_error| {
+            FileReadToStringError {
+                path: self.utf8_path_buf(),
+                io_error,
+            }
+        })
+    }
+
+    /// Reads file into vec, then tries to parse it into a struct
+    pub fn read_to_struct<T: DeserializeOwned>(
+        &self,
+    ) -> Result<T, FileReadToStructError> {
+        let file_bytes = fs::read(self.utf8_path_buf()).map_err(|io_error| {
+            FileReadToStructError::ReadToVec {
+                path: self.utf8_path_buf(),
+                io_error,
+            }
+        })?;
+
+        let mime = detect_mime(&file_bytes);
+        if mime_is_jsonlike(&mime) {
+            return serde_json::from_slice(&file_bytes).map_err(|serde_json_error| {
+                FileReadToStructError::ParseJson {
+                    path: self.utf8_path_buf(),
+                    serde_json_error,
+                }
+            });
+        }
+
+        Err(FileReadToStructError::UnsupportedFormat {
+            path: self.utf8_path_buf(),
+            mime,
+        })
+    }
 }
 
 impl Display for FluentFile {
@@ -166,7 +191,7 @@ impl Display for FluentFile {
     }
 }
 
-impl FileActions for FluentFile {
+impl FileActions<FluentFile> for FluentFile {
     fn name(&self) -> String {
         self.name.clone()
     }
@@ -198,11 +223,54 @@ impl FileActions for FluentFile {
         FluentFile::new(folder.into(), self.name.clone(), self.ext.clone())
     }
 
+    fn find_all(folder: impl Into<Folder>) -> impl Iterator<Item = FluentFile> {
+        WalkDir::new(folder.into().utf8_path_buf())
+            .sort_by_file_name()
+            .into_iter()
+            .filter_map(|dir_entry| {
+                let dir_ent = dir_entry.ok()?;
+                if !dir_ent.file_type().is_file() {
+                    return None;
+                }
+                let path = dir_ent.path();
+
+                let folder = path.parent()?.to_str()?;
+                let name = path.file_stem()?.to_str()?;
+                let mut ext = None;
+                if let Some(os_str) = path.extension() {
+                    ext = Some(os_str.to_str()?);
+                }
+                Some(FluentFile::new(folder, name, ext))
+            })
+    }
+
+    fn move_to(&self, to: &FluentFile) -> Result<FluentFile, FileMoveToError> {
+        to.parent().ensure_exists();
+        fs::rename(self.utf8_path_buf(), to.utf8_path_buf())
+            .map(|_| to.clone())
+            .map_err(|io_error| FileMoveToError {
+                from: self.utf8_path_buf(),
+                to: to.utf8_path_buf(),
+                io_error,
+            })
+    }
+
     fn remove(self) -> Result<(), FileRemoveError> {
         fs::remove_file(self.utf8_path_buf()).map_err(|io_error| FileRemoveError {
             path: self.utf8_path_buf(),
             io_error,
         })
+    }
+
+    fn copy_to(&self, to: &Self) -> Result<Self, FileCopyToError> {
+        to.parent().ensure_exists();
+        fs::copy(self.utf8_path_buf(), to.utf8_path_buf())
+            .map(|_| to.clone())
+            .map_err(|io_error| FileCopyToError {
+                from: self.utf8_path_buf(),
+                to: to.utf8_path_buf(),
+                io_error,
+            })
     }
 }
 

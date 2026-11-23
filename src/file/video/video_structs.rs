@@ -40,17 +40,6 @@ impl VideoFile {
         }
     }
 
-    /// Finds all video files (recursively) in the provided folder using [`walkdir::WalkDir`].
-    /// Skips any entry with an error, or whose file_type is not a file, or whose extension
-    /// is not a video file extension
-    pub fn find_all(folder: impl Into<Folder>) -> impl Iterator<Item = VideoFile> {
-        FluentFile::find_all(folder).filter_map(|ff| {
-            let ffext = ff.ext()?;
-            let format = VideoFormat::from_extension(ffext)?;
-            Some(VideoFile::new(ff.parent(), ff.name(), format))
-        })
-    }
-
     /// Gets the video format
     pub fn format(&self) -> VideoFormat {
         self.format
@@ -59,18 +48,6 @@ impl VideoFile {
     /// Gets the video format's extension
     pub fn ext(&self) -> String {
         self.format.to_string()
-    }
-
-    /// Copies the file to another location.
-    /// Before copying, ensures that the destination file's folder exists
-    pub fn copy_to(&self, to: &Self) -> Result<Self, FileCopyToError> {
-        self.inner.copy_to(&to.inner).map(|_| to.clone())
-    }
-
-    /// Moves the file to another location
-    /// Before moving, ensures that the destination file's folder exists
-    pub fn move_to(&self, to: &Self) -> Result<Self, FileMoveToError> {
-        self.inner.move_to(&to.inner).map(|_| to.clone())
     }
 
     /// Gets the video's metadata
@@ -171,7 +148,7 @@ impl Display for VideoFile {
     }
 }
 
-impl FileActions for VideoFile {
+impl FileActions<VideoFile> for VideoFile {
     fn name(&self) -> String {
         self.inner.name()
     }
@@ -198,6 +175,22 @@ impl FileActions for VideoFile {
 
     fn with_folder(&self, folder: impl Into<Folder>) -> VideoFile {
         VideoFile::new(folder.into(), self.name(), self.format)
+    }
+
+    fn find_all(folder: impl Into<Folder>) -> impl Iterator<Item = VideoFile> {
+        FluentFile::find_all(folder).filter_map(|ff| {
+            let ffext = ff.ext()?;
+            let format = VideoFormat::from_extension(ffext)?;
+            Some(VideoFile::new(ff.parent(), ff.name(), format))
+        })
+    }
+
+    fn copy_to(&self, to: &Self) -> Result<Self, FileCopyToError> {
+        self.inner.copy_to(&to.inner).map(|_| to.clone())
+    }
+
+    fn move_to(&self, to: &Self) -> Result<Self, FileMoveToError> {
+        self.inner.move_to(&to.inner).map(|_| to.clone())
     }
 
     fn remove(self) -> Result<(), FileRemoveError> {

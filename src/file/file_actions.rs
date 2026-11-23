@@ -1,8 +1,11 @@
 use camino::Utf8PathBuf;
 
-use crate::{file::FileRemoveError, folder::Folder};
+use crate::{
+    file::{FileCopyToError, FileMoveToError, FileRemoveError},
+    folder::Folder,
+};
 
-pub trait FileActions {
+pub trait FileActions<T> {
     fn name(&self) -> String;
     fn name_ext(&self) -> String;
     fn parent(&self) -> Folder;
@@ -10,6 +13,19 @@ pub trait FileActions {
     fn exists(&self) -> bool;
     fn with_name(&self, other_name: impl AsRef<str>) -> Self;
     fn with_folder(&self, folder: impl Into<Folder>) -> Self;
+
+    /// Finds all files (recursively) in a [`Folder`] using [`WalkDir`]. Skips any entry with an
+    /// error, or any entry whose file_type is not a file
+    fn find_all(folder: impl Into<Folder>) -> impl Iterator<Item = T>;
+
+    /// Copies the file to another location.
+    /// Before copying, ensures that the destination file's folder exists
+    fn copy_to(&self, to: &T) -> Result<T, FileCopyToError>;
+
+    /// Moves the file to another location
+    /// Before moving, ensures that the destination file's folder exists
+    fn move_to(&self, to: &T) -> Result<T, FileMoveToError>;
+
     fn remove(self) -> Result<(), FileRemoveError>;
 }
 
